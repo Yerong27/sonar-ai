@@ -19,7 +19,7 @@ class Settings:
             "topstories,newstories",
         ).split(",")
     )
-    poll_interval_seconds: int = int(os.getenv("SONAR_POLL_INTERVAL_SECONDS", "180"))
+    poll_interval_seconds: int = int(os.getenv("SONAR_POLL_INTERVAL_SECONDS", "300"))
     # Change 2: configurable gap threshold for monitoring reliability.
     monitor_gap_threshold_seconds: int = int(
         os.getenv("SONAR_MONITOR_GAP_THRESHOLD_SECONDS", "600")

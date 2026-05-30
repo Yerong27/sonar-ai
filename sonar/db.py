@@ -102,6 +102,52 @@ class Database:
                     created_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS documents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    url TEXT,
+                    content TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    UNIQUE (source, source_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS document_terms (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    document_id INTEGER NOT NULL,
+                    terms_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (document_id) REFERENCES documents(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS ai_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    anomaly_id INTEGER,
+                    provider TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    schema_name TEXT NOT NULL,
+                    prompt TEXT NOT NULL,
+                    raw_response TEXT,
+                    parsed_json TEXT,
+                    status TEXT NOT NULL,
+                    error TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (anomaly_id) REFERENCES anomalies(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS brief_evidence (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ai_run_id INTEGER NOT NULL,
+                    document_id INTEGER NOT NULL,
+                    reason_used TEXT NOT NULL,
+                    rank INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (ai_run_id) REFERENCES ai_runs(id),
+                    FOREIGN KEY (document_id) REFERENCES documents(id)
+                );
+
                 CREATE TABLE IF NOT EXISTS system_status (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL,
@@ -145,6 +191,18 @@ class Database:
                 """
                 CREATE INDEX IF NOT EXISTS idx_hn_story_snapshot_feed_time
                 ON hn_story_snapshots (source_feed, collected_at)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_documents_source_id
+                ON documents (source, source_id)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_ai_runs_anomaly_created
+                ON ai_runs (anomaly_id, created_at)
                 """
             )
 
@@ -275,6 +333,102 @@ class Database:
                 (source_scope, json.dumps(response_json), story_count, utc_now()),
             )
 
+    def upsert_document(
+        self,
+        *,
+        source: str,
+        source_id: str,
+        title: str,
+        url: str | None,
+        content: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> int:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO documents (
+                    source, source_id, title, url, content, metadata_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(source, source_id) DO UPDATE SET
+                    title = excluded.title,
+                    url = excluded.url,
+                    content = excluded.content,
+                    metadata_json = excluded.metadata_json
+                """,
+                (
+                    source,
+                    source_id,
+                    title,
+                    url,
+                    content,
+                    json.dumps(metadata or {}),
+                    utc_now(),
+                ),
+            )
+            row = conn.execute(
+                """
+                SELECT id
+                FROM documents
+                WHERE source = ? AND source_id = ?
+                """,
+                (source, source_id),
+            ).fetchone()
+            return int(row["id"])
+
+    def insert_ai_run(
+        self,
+        *,
+        anomaly_id: int | None,
+        provider: str,
+        model: str,
+        schema_name: str,
+        prompt: str,
+        raw_response: str | None,
+        parsed_json: dict[str, Any] | None,
+        status: str,
+        error: str | None = None,
+    ) -> int:
+        with self.connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO ai_runs (
+                    anomaly_id, provider, model, schema_name, prompt, raw_response,
+                    parsed_json, status, error, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    anomaly_id,
+                    provider,
+                    model,
+                    schema_name,
+                    prompt,
+                    raw_response,
+                    json.dumps(parsed_json) if parsed_json is not None else None,
+                    status,
+                    error,
+                    utc_now(),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def insert_brief_evidence(
+        self,
+        *,
+        ai_run_id: int,
+        document_id: int,
+        reason_used: str,
+        rank: int,
+    ) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO brief_evidence (
+                    ai_run_id, document_id, reason_used, rank, created_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (ai_run_id, document_id, reason_used, rank, utc_now()),
+            )
+
     def get_latest_monitoring_summary_timestamp(self) -> str | None:
         with self.connect() as conn:
             row = conn.execute(
@@ -328,6 +482,10 @@ class Database:
     def reset_monitoring_session(self) -> None:
         with self.connect() as conn:
             conn.execute("DELETE FROM explanations")
+            conn.execute("DELETE FROM brief_evidence")
+            conn.execute("DELETE FROM ai_runs")
+            conn.execute("DELETE FROM document_terms")
+            conn.execute("DELETE FROM documents")
             conn.execute("DELETE FROM news_matches")
             conn.execute("DELETE FROM anomalies")
             conn.execute("DELETE FROM aggregated_metrics")
@@ -339,6 +497,10 @@ class Database:
                 DELETE FROM sqlite_sequence
                 WHERE name IN (
                     'explanations',
+                    'brief_evidence',
+                    'ai_runs',
+                    'document_terms',
+                    'documents',
                     'news_matches',
                     'anomalies',
                     'aggregated_metrics',

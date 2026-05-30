@@ -1,0 +1,38 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8060:8060"
+    volumes:
+      - sonar-data:/app/sonar/data
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: python -m sonar.worker
+    volumes:
+      - sonar-data:/app/sonar/data
+
+  dash:
+    build:
+      context: .
+      dockerfile: Dockerfile.dash
+    ports:
+      - "8050:8050"
+    volumes:
+      - sonar-data:/app/sonar/data
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  sonar-data:

@@ -1,0 +1,11 @@
+.DS_Store
+.env
+.git
+.pytest_cache
+.venv
+__pycache__
+frontend/dist
+frontend/node_modules
+sonar/data/*.db
+sonar/data/*.sqlite
+sonar/data/*.sqlite3
