@@ -238,11 +238,16 @@ function formatDateTime(value: unknown) {
 }
 
 function storyHref(story: Row) {
-  return String(story.url || story.permalink || `https://news.ycombinator.com/item?id=${story.story_id}`);
+  const permalink = String(story.permalink || "");
+  if (permalink.includes("news.ycombinator.com/item?id=")) return permalink;
+  if (story.story_id !== undefined && story.story_id !== null) {
+    return `https://news.ycombinator.com/item?id=${story.story_id}`;
+  }
+  return permalink || String(story.url || "https://news.ycombinator.com/");
 }
 
 function discussionHref(story: Row) {
-  return String(story.permalink || `https://news.ycombinator.com/item?id=${story.story_id}`);
+  return storyHref(story);
 }
 
 function apiBase() {
@@ -637,7 +642,7 @@ export default function Dashboard() {
                   </div>
                 </Panel>
                 <Panel title="Signal velocity" className="velocity-panel">
-                  <ResponsiveContainer width="100%" height={185}>
+                  <ResponsiveContainer width="100%" height={280}>
                     <ScatterChart margin={{ left: 2, right: 20, top: 8, bottom: 0 }}>
                       <CartesianGrid stroke="rgba(112,151,204,.10)" />
                       <XAxis type="number" dataKey="volume" name="Volume" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -674,7 +679,7 @@ export default function Dashboard() {
               </Panel>
               <Panel title="Signal feed (live)" className="signal-feed-panel">
                 <div className="signal-feed-list">
-                  {data.stories.slice(0, 7).map((story, index) => (
+                  {data.stories.slice(0, 10).map((story, index) => (
                     <a href={storyHref(story)} target="_blank" rel="noreferrer" key={story.story_id}>
                       <time>{formatTime(story.collected_at)}</time>
                       <span className={story.source_feed === "topstories" ? "feed-kind hot" : "feed-kind"}>{story.source_feed === "topstories" ? "Top" : "New"}</span>
@@ -912,19 +917,23 @@ export default function Dashboard() {
             </table>
           </div>
           <div className="pagination-controls" aria-label="Story pages">
-            <button type="button" onClick={() => setStoryPage(Math.max(1, safeStoryPage - 1))} disabled={safeStoryPage === 1}>Previous</button>
-            {Array.from({ length: storyTotalPages }, (_, index) => index + 1).map((page) => (
-              <button
-                type="button"
-                key={page}
-                className={page === safeStoryPage ? "active" : ""}
-                aria-current={page === safeStoryPage ? "page" : undefined}
-                onClick={() => setStoryPage(page)}
-              >
-                {page}
-              </button>
-            ))}
-            <button type="button" onClick={() => setStoryPage(Math.min(storyTotalPages, safeStoryPage + 1))} disabled={safeStoryPage === storyTotalPages}>Next</button>
+            <button className="pagination-direction" type="button" onClick={() => setStoryPage(Math.max(1, safeStoryPage - 1))} disabled={safeStoryPage === 1}>← Previous page</button>
+            <span className="pagination-status">Page {safeStoryPage} of {storyTotalPages}</span>
+            <div className="pagination-pages">
+              {Array.from({ length: storyTotalPages }, (_, index) => index + 1).map((page) => (
+                <button
+                  type="button"
+                  key={page}
+                  className={page === safeStoryPage ? "active" : ""}
+                  aria-label={`Go to story page ${page}`}
+                  aria-current={page === safeStoryPage ? "page" : undefined}
+                  onClick={() => setStoryPage(page)}
+                >
+                  {page}
+                </button>
+              ))}
+            </div>
+            <button className="pagination-direction" type="button" onClick={() => setStoryPage(Math.min(storyTotalPages, safeStoryPage + 1))} disabled={safeStoryPage === storyTotalPages}>Next page →</button>
           </div>
         </div>
       </section>
