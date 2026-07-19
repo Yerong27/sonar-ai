@@ -5,6 +5,8 @@ import {
   Activity,
   AlertTriangle,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Database,
   ExternalLink,
   Radio,
@@ -563,24 +565,26 @@ export default function Dashboard() {
           ["intelligence", "AI intelligence", "Themes and story links"],
           ["investigations", "Investigations", `${eventBriefs.length} evidence briefs`],
           ["stories", "Story explorer", `${data.stories.length} monitored stories`],
-        ].map(([id, label, detail]) => (
+        ].map(([id, label, detail], index) => (
           <button
             type="button"
             key={id}
             aria-pressed={activeView === id}
             onClick={() => setActiveView(id as typeof activeView)}
           >
-            <b>{label}</b>
-            <small>{detail}</small>
+            <span className="workspace-tab-index">{String(index + 1).padStart(2, "0")}</span>
+            <span className="workspace-tab-copy">
+              <b>{label}</b>
+              <small>{detail}</small>
+            </span>
           </button>
         ))}
       </nav>
 
       {activeView === "overview" && (
         <>
-          <section className="operations-grid">
-            <div className="operations-main">
-              <Panel title="Signal overview" className="signal-overview-panel">
+          <section className="overview-board">
+            <Panel title="Signal overview" className="signal-overview-panel">
                 <div className="overview-stats">
                   <span><small>Signals</small><b>{formatNumber(counts.stories || data.stories.length)}</b></span>
                   <span><small>Trending</small><b className="cyan-value">{formatNumber(totalComments)}</b></span>
@@ -618,119 +622,120 @@ export default function Dashboard() {
                     ))}
                   </div>
                 )}
-              </Panel>
-              <div className="operations-subgrid">
-                <Panel title="Top emerging topics" className="emerging-panel">
-                  <div className="emerging-list">
-                    {emergingTopics.map((item: Row, index: number) => {
-                      const isSelected = selectedKeyword === item.theme;
-                      return (
-                        <button
-                          type="button"
-                          key={item.theme}
-                          aria-pressed={isSelected}
-                          onClick={() => {
-                            setSelectedKeyword(isSelected ? null : item.theme);
-                            setActiveView("intelligence");
-                          }}
-                        >
-                          <span><b>{item.theme}</b><em>{formatNumber(item.score)}</em></span>
-                          <i><span style={{ width: `${Math.max(14, (Number(item.score || 0) / maxTopicScore) * 100)}%`, opacity: 1 - index * 0.1 }} /></i>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </Panel>
-                <Panel title="Signal velocity" className="velocity-panel">
-                  <ResponsiveContainer width="100%" height={280}>
-                    <ScatterChart margin={{ left: 2, right: 20, top: 8, bottom: 0 }}>
-                      <CartesianGrid stroke="rgba(112,151,204,.10)" />
-                      <XAxis type="number" dataKey="volume" name="Volume" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-                      <YAxis type="number" dataKey="velocity" name="Velocity" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={40} />
-                      <ZAxis type="number" dataKey="size" range={[55, 190]} />
-                      <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltip />} />
-                      <Scatter data={scatterData}>
-                        {scatterData.map((item, index) => <Cell key={item.id || index} fill={item.news_aligned ? COLORS.orange : COLORS.cyan} />)}
-                      </Scatter>
-                    </ScatterChart>
-                  </ResponsiveContainer>
-                </Panel>
+            </Panel>
+
+            <Panel title="Live status" className="operations-status-panel">
+              <div className={alertCount ? "operations-alert active" : "operations-alert"}>
+                <AlertTriangle size={18} />
+                <span><b>{alertCount ? "Anomaly detected" : "Monitoring stable"}</b><small>{alertCount ? "High-confidence signal requires review" : "All monitored feeds are within range"}</small></span>
+                <em>{alertCount ? "Now" : "Healthy"}</em>
               </div>
-            </div>
-            <aside className="operations-rail">
-              <Panel title="Live status" className="operations-status-panel">
-                <div className={alertCount ? "operations-alert active" : "operations-alert"}>
-                  <AlertTriangle size={18} />
-                  <span><b>{alertCount ? "Anomaly detected" : "Monitoring stable"}</b><small>{alertCount ? "High-confidence signal requires review" : "All monitored feeds are within range"}</small></span>
-                  <em>{alertCount ? "Now" : "Healthy"}</em>
-                </div>
-                <div className="operations-status-list">
-                  {statusRows.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <div key={item.label}>
-                        <Icon size={18} />
-                        <span><b>{item.label}</b><small>{item.detail}</small></span>
-                        <strong>{item.value}</strong>
-                      </div>
-                    );
-                  })}
-                </div>
-              </Panel>
-              <Panel title="Signal feed (live)" className="signal-feed-panel">
-                <div className="signal-feed-list">
-                  {data.stories.slice(0, 10).map((story, index) => (
-                    <a href={storyHref(story)} target="_blank" rel="noreferrer" key={story.story_id}>
-                      <time>{formatTime(story.collected_at)}</time>
-                      <span className={story.source_feed === "topstories" ? "feed-kind hot" : "feed-kind"}>{story.source_feed === "topstories" ? "Top" : "New"}</span>
-                      <b>{story.title}</b>
-                      <i className="micro-trend" aria-hidden="true">
-                        {[32, 45, 39, 64, 48, 75, 57].map((height, point) => (
-                          <span key={point} style={{ height: `${Math.max(14, height - index * 4)}%` }} />
-                        ))}
-                      </i>
-                      <strong>↑ {formatNumber(Number(story.score || 0) + Number(story.num_comments || 0))}</strong>
-                    </a>
-                  ))}
-                </div>
-              </Panel>
-            </aside>
+              <div className="operations-status-list">
+                {statusRows.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div key={item.label}>
+                      <Icon size={18} />
+                      <span><b>{item.label}</b><small>{item.detail}</small></span>
+                      <strong>{item.value}</strong>
+                    </div>
+                  );
+                })}
+              </div>
+            </Panel>
+
+            <Panel title="Top emerging topics" className="emerging-panel">
+              <div className="emerging-list">
+                {emergingTopics.map((item: Row, index: number) => {
+                  const isSelected = selectedKeyword === item.theme;
+                  return (
+                    <button
+                      type="button"
+                      key={item.theme}
+                      aria-pressed={isSelected}
+                      onClick={() => {
+                        setSelectedKeyword(isSelected ? null : item.theme);
+                        setActiveView("intelligence");
+                      }}
+                    >
+                      <span><b>{item.theme}</b><em>{formatNumber(item.score)}</em></span>
+                      <i><span style={{ width: `${Math.max(14, (Number(item.score || 0) / maxTopicScore) * 100)}%`, opacity: 1 - index * 0.1 }} /></i>
+                    </button>
+                  );
+                })}
+              </div>
+            </Panel>
+
+            <Panel title="Signal velocity" className="velocity-panel">
+              <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart margin={{ left: 2, right: 20, top: 8, bottom: 0 }}>
+                  <CartesianGrid stroke="rgba(112,151,204,.10)" />
+                  <XAxis type="number" dataKey="volume" name="Volume" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis type="number" dataKey="velocity" name="Velocity" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={40} />
+                  <ZAxis type="number" dataKey="size" range={[55, 190]} />
+                  <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltip />} />
+                  <Scatter data={scatterData}>
+                    {scatterData.map((item, index) => <Cell key={item.id || index} fill={item.news_aligned ? COLORS.orange : COLORS.cyan} />)}
+                  </Scatter>
+                </ScatterChart>
+              </ResponsiveContainer>
+            </Panel>
+
+            <Panel title="Signal feed (live)" className="signal-feed-panel">
+              <div className="signal-feed-list">
+                {data.stories.slice(0, 7).map((story, index) => (
+                  <a href={storyHref(story)} target="_blank" rel="noreferrer" key={story.story_id}>
+                    <time>{formatTime(story.collected_at)}</time>
+                    <span className={story.source_feed === "topstories" ? "feed-kind hot" : "feed-kind"}>{story.source_feed === "topstories" ? "Top" : "New"}</span>
+                    <b>{story.title}</b>
+                    <i className="micro-trend" aria-hidden="true">
+                      {[32, 45, 39, 64, 48, 75, 57].map((height, point) => (
+                        <span key={point} style={{ height: `${Math.max(14, height - index * 4)}%` }} />
+                      ))}
+                    </i>
+                    <strong>↑ {formatNumber(Number(story.score || 0) + Number(story.num_comments || 0))}</strong>
+                  </a>
+                ))}
+              </div>
+            </Panel>
           </section>
 
-      <Panel title="Top feed new entries" className="top-entry-panel">
-        <div className="table-intro">
-          <span>Strongest new stories in the current observation window</span>
-          <small>Ranked by score and conversation velocity</small>
-        </div>
-        <div className="compact-table">
-          {data.stories.slice(0, 5).map((story) => (
-            <a href={storyHref(story)} target="_blank" rel="noreferrer" key={story.story_id}>
-              <span>{story.title}</span>
-              <b>{formatNumber(story.score)}</b>
-              <em>{formatNumber(story.num_comments)} comments</em>
-              <small>{formatTime(story.collected_at)}</small>
-            </a>
-          ))}
-        </div>
-      </Panel>
-
-      <Panel title="Top stories by score gain" className="score-panel">
-        <div className="score-bars">
-          {data.stories.slice(0, 6).map((story, index) => {
-            const max = Number(data.stories[0]?.score || 1);
-            const width = Math.max(12, (Number(story.score || 0) / max) * 100);
-            return (
-              <div className="score-row" key={story.story_id}>
-                <div className="score-track">
-                  <span style={{ width: `${width}%`, opacity: 1 - index * 0.09 }} />
-                  <a href={storyHref(story)} target="_blank" rel="noreferrer">{story.title}</a>
-                </div>
-                <b>{formatNumber(story.score)}</b>
+          <section className="overview-lower-grid">
+            <Panel title="Top feed new entries" className="top-entry-panel">
+              <div className="table-intro">
+                <span>Strongest new stories in the current observation window</span>
+                <small>Ranked by score and conversation velocity</small>
               </div>
-            );
-          })}
-        </div>
-      </Panel>
+              <div className="compact-table">
+                {data.stories.slice(0, 5).map((story) => (
+                  <a href={storyHref(story)} target="_blank" rel="noreferrer" key={story.story_id}>
+                    <span>{story.title}</span>
+                    <b>{formatNumber(story.score)}</b>
+                    <em>{formatNumber(story.num_comments)} comments</em>
+                    <small>{formatTime(story.collected_at)}</small>
+                  </a>
+                ))}
+              </div>
+            </Panel>
+
+            <Panel title="Top stories by score gain" className="score-panel">
+              <div className="score-bars">
+                {data.stories.slice(0, 6).map((story, index) => {
+                  const max = Number(data.stories[0]?.score || 1);
+                  const width = Math.max(12, (Number(story.score || 0) / max) * 100);
+                  return (
+                    <div className="score-row" key={story.story_id}>
+                      <div className="score-track">
+                        <span style={{ width: `${width}%`, opacity: 1 - index * 0.09 }} />
+                        <a href={storyHref(story)} target="_blank" rel="noreferrer">{story.title}</a>
+                      </div>
+                      <b>{formatNumber(story.score)}</b>
+                    </div>
+                  );
+                })}
+              </div>
+            </Panel>
+          </section>
         </>
       )}
 
@@ -917,23 +922,18 @@ export default function Dashboard() {
             </table>
           </div>
           <div className="pagination-controls" aria-label="Story pages">
-            <button className="pagination-direction" type="button" onClick={() => setStoryPage(Math.max(1, safeStoryPage - 1))} disabled={safeStoryPage === 1}>← Previous page</button>
-            <span className="pagination-status">Page {safeStoryPage} of {storyTotalPages}</span>
-            <div className="pagination-pages">
-              {Array.from({ length: storyTotalPages }, (_, index) => index + 1).map((page) => (
-                <button
-                  type="button"
-                  key={page}
-                  className={page === safeStoryPage ? "active" : ""}
-                  aria-label={`Go to story page ${page}`}
-                  aria-current={page === safeStoryPage ? "page" : undefined}
-                  onClick={() => setStoryPage(page)}
-                >
-                  {page}
-                </button>
-              ))}
+            <span className="pagination-range">
+              Showing <b>{filteredStories.length ? (safeStoryPage - 1) * storyPageSize + 1 : 0}–{Math.min(safeStoryPage * storyPageSize, filteredStories.length)}</b> of {filteredStories.length}
+            </span>
+            <div className="pagination-stepper">
+              <button type="button" onClick={() => setStoryPage(Math.max(1, safeStoryPage - 1))} disabled={safeStoryPage === 1}>
+                <ChevronLeft size={16} /> Previous
+              </button>
+              <span className="pagination-status"><small>Page</small> {safeStoryPage} <i>/</i> {storyTotalPages}</span>
+              <button type="button" onClick={() => setStoryPage(Math.min(storyTotalPages, safeStoryPage + 1))} disabled={safeStoryPage === storyTotalPages}>
+                Next <ChevronRight size={16} />
+              </button>
             </div>
-            <button className="pagination-direction" type="button" onClick={() => setStoryPage(Math.min(storyTotalPages, safeStoryPage + 1))} disabled={safeStoryPage === storyTotalPages}>Next page →</button>
           </div>
         </div>
       </section>
