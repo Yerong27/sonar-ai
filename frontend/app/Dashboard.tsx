@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Database,
@@ -372,7 +371,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const [activeView, setActiveView] = useState<"overview" | "intelligence" | "investigations" | "stories">("overview");
+  const [activeView, setActiveView] = useState<"overview" | "intelligence" | "investigations">("overview");
   const [search, setSearch] = useState("");
   const [feed, setFeed] = useState("all");
   const [timeWindow, setTimeWindow] = useState("current");
@@ -475,6 +474,7 @@ export default function Dashboard() {
     size: Math.max(60, Number(row.metric_value || 1)),
   }));
   const eventBriefs = intelligence.event_briefs || [];
+  const selectedBrief = eventBriefs.find((brief: Row) => brief.id === openBrief) || eventBriefs[0] || {};
   const totalScore = data.stories.reduce((sum, row) => sum + Number(row.score || 0), 0);
   const totalComments = data.stories.reduce((sum, row) => sum + Number(row.num_comments || 0), 0);
   const emergingTopics = (intelligence.ranked_themes || []).slice(0, 5);
@@ -522,7 +522,6 @@ export default function Dashboard() {
               ["overview", "Overview"],
               ["intelligence", "AI intelligence"],
               ["investigations", "Investigations"],
-              ["stories", "Story explorer"],
             ].map(([id, label]) => (
               <button
                 type="button"
@@ -820,47 +819,63 @@ export default function Dashboard() {
       )}
 
       {activeView === "investigations" && (
-      <section className="event-section">
-        <SectionHeader eyebrow="Event briefs" title="Investigation queue" copy={`${eventBriefs.length} evidence-grounded cases available for analyst review.`} />
-        <div className="brief-accordion">
-          {eventBriefs.slice(0, 5).map((brief: Row) => {
-            const open = openBrief === brief.id;
+      <section className="investigation-workspace">
+        <SectionHeader
+          eyebrow="Investigation workspace"
+          title="Evidence briefs and monitored stories"
+          copy={`${eventBriefs.length} active cases connected to ${data.stories.length} Hacker News stories.`}
+          action={<span className="verified-badge"><ShieldCheck size={15} /> API-only data boundary</span>}
+        />
+
+        <div className="investigation-cases">
+          {eventBriefs.slice(0, 5).map((brief: Row, index: number) => {
+            const selected = selectedBrief.id === brief.id;
             return (
-              <article className={open ? "brief-case open" : "brief-case"} key={brief.id}>
-                <button type="button" onClick={() => setOpenBrief(open ? null : brief.id)}>
-                  <span><i className={brief.news_aligned ? "case-dot aligned" : "case-dot"} />{brief.headline_summary || brief.topic}</span>
-                  <small>{brief.event_type?.replaceAll("_", " ")} · z {formatNumber(brief.z_score, 1)}</small>
-                  <ChevronDown size={17} />
-                </button>
-                {open && (
-                  <div className="case-body">
-                    <div className="case-facts">
-                      <span><b>Feed</b>{brief.source_feed}</span>
-                      <span><b>Triggered by</b>{brief.triggered_by}</span>
-                      <span><b>Evidence</b>{brief.evidence_count || 0} linked records</span>
-                      <span><b>News</b>{brief.news_aligned ? "Externally aligned" : "Unconfirmed"}</span>
-                    </div>
-                    <p>{brief.summary}</p>
-                    <div className="case-tags">
-                      <span>{brief.topic}</span><span>{brief.sentiment_label}</span><span>{Math.round(Number(brief.confidence || 0) * 100)}% confidence</span>
-                    </div>
-                  </div>
-                )}
-              </article>
+              <button
+                type="button"
+                className={selected ? "investigation-case active" : "investigation-case"}
+                aria-pressed={selected}
+                onClick={() => setOpenBrief(brief.id)}
+                key={brief.id}
+              >
+                <span className="case-summary-top">
+                  <span><i className={brief.news_aligned ? "case-dot aligned" : "case-dot"} /> Case {String(index + 1).padStart(2, "0")}</span>
+                  <em>{Math.round(Number(brief.confidence || 0) * 100)}%</em>
+                </span>
+                <b>{brief.headline_summary || brief.topic}</b>
+                <small>{brief.topic} · {brief.evidence_count || 0} evidence items</small>
+              </button>
             );
           })}
         </div>
-      </section>
-      )}
 
-      {activeView === "stories" && (
-      <section className="story-section">
-        <SectionHeader
-          eyebrow="Story explorer"
-          title="Latest monitored Hacker News stories"
-          copy="Filter the current signal set by feed or search across titles."
-          action={<span className="verified-badge"><ShieldCheck size={15} /> API-only data boundary</span>}
-        />
+        <article className="investigation-detail">
+          <div className="investigation-detail-heading">
+            <span>Selected assessment</span>
+            <strong>{selectedBrief.event_type?.replaceAll("_", " ") || "signal review"} · z {formatNumber(selectedBrief.z_score, 1)}</strong>
+          </div>
+          <div className="case-facts">
+            <span><b>Feed</b>{selectedBrief.source_feed || "—"}</span>
+            <span><b>Triggered by</b>{selectedBrief.triggered_by || "—"}</span>
+            <span><b>Evidence</b>{selectedBrief.evidence_count || 0} linked records</span>
+            <span><b>News</b>{selectedBrief.news_aligned ? "Externally aligned" : "Unconfirmed"}</span>
+          </div>
+          <p>{selectedBrief.summary || "No investigation summary is available."}</p>
+          <div className="case-tags">
+            <span>{selectedBrief.topic || "Signal intelligence"}</span>
+            <span>{selectedBrief.sentiment_label || "neutral"}</span>
+            <span>{Math.round(Number(selectedBrief.confidence || 0) * 100)}% confidence</span>
+          </div>
+        </article>
+
+        <div className="story-workspace-heading">
+          <div>
+            <span className="section-kicker">Story explorer</span>
+            <h3>Latest monitored Hacker News stories</h3>
+          </div>
+          <p>Filter the evidence set by feed, time, rank or title.</p>
+        </div>
+
         <div className="story-panel">
           <div className="story-toolbar">
             <label className="story-search"><span>Search</span><span><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Titles or keywords" /></span></label>
