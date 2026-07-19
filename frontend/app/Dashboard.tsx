@@ -515,8 +515,31 @@ export default function Dashboard() {
   return (
     <main className="dashboard">
       <header className="hero">
-        <div className="hero-copy">
+        <div className="app-bar">
           <div className="brand-pill"><Activity size={13} /> Sonar</div>
+          <nav className="workspace-tabs" aria-label="Dashboard sections">
+            {[
+              ["overview", "Overview"],
+              ["intelligence", "AI intelligence"],
+              ["investigations", "Investigations"],
+              ["stories", "Story explorer"],
+            ].map(([id, label]) => (
+              <button
+                type="button"
+                key={id}
+                aria-pressed={activeView === id}
+                onClick={() => setActiveView(id as typeof activeView)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+          <button className="refresh-button" type="button" onClick={() => refresh(true)} disabled={refreshing}>
+            <RefreshCw size={14} className={refreshing ? "spin" : ""} />
+            {refreshing ? "Refreshing" : "Refresh"}
+          </button>
+        </div>
+        <div className="hero-copy">
           <h1>Hacker News signal radar</h1>
           <p>Live HN signals, anomaly detection and evidence-grounded AI intelligence.</p>
         </div>
@@ -539,10 +562,6 @@ export default function Dashboard() {
             <span><b>Last scan</b>{formatTime(status.last_collection_time)}</span>
           </div>
         </div>
-        <button className="refresh-button" type="button" onClick={() => refresh(true)} disabled={refreshing}>
-          <RefreshCw size={14} className={refreshing ? "spin" : ""} />
-          {refreshing ? "Refreshing" : "Refresh"}
-        </button>
       </header>
 
       {(notice || data.mode === "demo") && (
@@ -558,28 +577,6 @@ export default function Dashboard() {
         <MetricCard label="HN comments" value={formatNumber(totalComments)} note="Conversation intensity" />
         <MetricCard label="Active alerts" value={formatNumber(alertCount)} note={`${anomalies.length} signals under triage`} alert={alertCount > 0} />
       </section>
-
-      <nav className="workspace-tabs" aria-label="Dashboard sections">
-        {[
-          ["overview", "Overview", "Signals and live activity"],
-          ["intelligence", "AI intelligence", "Themes and story links"],
-          ["investigations", "Investigations", `${eventBriefs.length} evidence briefs`],
-          ["stories", "Story explorer", `${data.stories.length} monitored stories`],
-        ].map(([id, label, detail], index) => (
-          <button
-            type="button"
-            key={id}
-            aria-pressed={activeView === id}
-            onClick={() => setActiveView(id as typeof activeView)}
-          >
-            <span className="workspace-tab-index">{String(index + 1).padStart(2, "0")}</span>
-            <span className="workspace-tab-copy">
-              <b>{label}</b>
-              <small>{detail}</small>
-            </span>
-          </button>
-        ))}
-      </nav>
 
       {activeView === "overview" && (
         <>
