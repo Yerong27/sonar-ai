@@ -49,17 +49,31 @@ const COLORS = {
   muted: "#8297b8",
 };
 
+const demoTimestamp = (hoursAgo: number) => new Date(Date.now() - hoursAgo * 60 * 60 * 1000).toISOString();
+
 const demoStories = [
-  { story_id: 1, source_feed: "topstories", title: "Open models are changing the economics of AI inference", score: 2277, num_comments: 482, collected_at: "2026-07-19T05:42:00Z", permalink: "https://news.ycombinator.com/" },
-  { story_id: 2, source_feed: "topstories", title: "Show HN: A privacy-first local coding agent", score: 1541, num_comments: 323, collected_at: "2026-07-19T05:36:00Z", permalink: "https://news.ycombinator.com/" },
-  { story_id: 3, source_feed: "newstories", title: "Inside the new generation of vector databases", score: 1191, num_comments: 476, collected_at: "2026-07-19T05:31:00Z", permalink: "https://news.ycombinator.com/" },
-  { story_id: 4, source_feed: "topstories", title: "A tiny compiler that explains every optimization", score: 864, num_comments: 172, collected_at: "2026-07-19T05:25:00Z", permalink: "https://news.ycombinator.com/" },
-  { story_id: 5, source_feed: "newstories", title: "Why observability systems fail during real incidents", score: 739, num_comments: 208, collected_at: "2026-07-19T05:18:00Z", permalink: "https://news.ycombinator.com/" },
-  { story_id: 6, source_feed: "topstories", title: "The hidden maintenance cost of generated code", score: 691, num_comments: 221, collected_at: "2026-07-19T05:11:00Z", permalink: "https://news.ycombinator.com/" },
-  { story_id: 7, source_feed: "newstories", title: "Postgres at the edge: lessons from production", score: 565, num_comments: 103, collected_at: "2026-07-19T05:03:00Z", permalink: "https://news.ycombinator.com/" },
-  { story_id: 8, source_feed: "topstories", title: "A practical guide to secure model context protocols", score: 493, num_comments: 156, collected_at: "2026-07-19T04:57:00Z", permalink: "https://news.ycombinator.com/" },
-  { story_id: 9, source_feed: "newstories", title: "Building a search engine with SQLite", score: 428, num_comments: 92, collected_at: "2026-07-19T04:48:00Z", permalink: "https://news.ycombinator.com/" },
-  { story_id: 10, source_feed: "topstories", title: "What senior engineers actually do", score: 387, num_comments: 141, collected_at: "2026-07-19T04:40:00Z", permalink: "https://news.ycombinator.com/" },
+  { story_id: 47687273, source_feed: "topstories", title: "Git commands I run before reading any code", score: 2278, num_comments: 494, collected_at: demoTimestamp(1), permalink: "https://news.ycombinator.com/item?id=47687273", url: "https://piechowski.io/post/git-commands-before-reading-code/" },
+  { story_id: 47659135, source_feed: "topstories", title: "Sam Altman may control our future – can he be trusted?", score: 2172, num_comments: 904, collected_at: demoTimestamp(2), permalink: "https://news.ycombinator.com/item?id=47659135", url: "https://www.newyorker.com/magazine/2026/04/13/sam-altman-may-control-our-future-can-he-be-trusted" },
+  { story_id: 47691730, source_feed: "topstories", title: "I ported Mac OS X to the Nintendo Wii", score: 1901, num_comments: 323, collected_at: demoTimestamp(3), permalink: "https://news.ycombinator.com/item?id=47691730", url: "https://bryankeller.github.io/2026/04/08/porting-mac-os-x-nintendo-wii.html" },
+  { story_id: 48311647, source_feed: "topstories", title: "Claude Opus 4.8", score: 1736, num_comments: 1351, collected_at: demoTimestamp(4), permalink: "https://news.ycombinator.com/item?id=48311647", url: "https://www.anthropic.com/news/claude-opus-4-8" },
+  { story_id: 47706268, source_feed: "topstories", title: "EFF is leaving X", score: 1401, num_comments: 1274, collected_at: demoTimestamp(6), permalink: "https://news.ycombinator.com/item?id=47706268", url: "https://www.eff.org/deeplinks/2026/04/eff-leaving-x" },
+  { story_id: 47697870, source_feed: "newstories", title: "LittleSnitch for Linux", score: 1352, num_comments: 452, collected_at: demoTimestamp(8), permalink: "https://news.ycombinator.com/item?id=47697870", url: "https://obdev.at/products/littlesnitch-linux/index.html" },
+  { story_id: 48314136, source_feed: "topstories", title: "Bricks and Minifigs Stole a Man's $200k Lego Collection", score: 1309, num_comments: 589, collected_at: demoTimestamp(12), permalink: "https://news.ycombinator.com/item?id=48314136", url: "https://mybricklog.com/blog/bricks-minifigs-corporate-stole-old-mans-200000-lego-collection" },
+  { story_id: 48299753, source_feed: "topstories", title: "YouTube to automatically label AI-generated videos", score: 1308, num_comments: 818, collected_at: demoTimestamp(18), permalink: "https://news.ycombinator.com/item?id=48299753", url: "https://blog.youtube/news-and-events/improving-ai-labels-viewers-creators/" },
+  { story_id: 48324712, source_feed: "newstories", title: "The dead economy theory", score: 1049, num_comments: 1185, collected_at: demoTimestamp(23), permalink: "https://news.ycombinator.com/item?id=48324712", url: "https://www.owenmcgrann.com/p/the-dead-economy-theory" },
+  { story_id: 47725583, source_feed: "topstories", title: "Artemis II safely splashes down", score: 900, num_comments: 280, collected_at: demoTimestamp(28), permalink: "https://news.ycombinator.com/item?id=47725583", url: "https://www.cbsnews.com/live-updates/artemis-ii-splashdown-return/" },
+  { story_id: 47719740, source_feed: "newstories", title: "1D Chess", score: 819, num_comments: 142, collected_at: demoTimestamp(36), permalink: "https://news.ycombinator.com/item?id=47719740", url: "https://rowan441.github.io/1dchess/chess.html" },
+  { story_id: 47724352, source_feed: "topstories", title: "Filing the corners off my MacBooks", score: 816, num_comments: 403, collected_at: demoTimestamp(48), permalink: "https://news.ycombinator.com/item?id=47724352", url: "https://kentwalters.com/posts/corners/" },
+  { story_id: 48323683, source_feed: "newstories", title: "I am retiring from tech to live offline", score: 800, num_comments: 548, collected_at: demoTimestamp(60), permalink: "https://news.ycombinator.com/item?id=48323683", url: "https://openpath.quest/2026/i-am-retiring-from-tech-to-live-offline/" },
+  { story_id: 48324499, source_feed: "topstories", title: "GTA 6 Developers Unionize", score: 689, num_comments: 468, collected_at: demoTimestamp(72), permalink: "https://news.ycombinator.com/item?id=48324499", url: "https://rockstarintel.com/gta-6-developers-announce-rockstar-games-union/" },
+  { story_id: 47708818, source_feed: "newstories", title: "Native Instant Space Switching on macOS", score: 625, num_comments: 310, collected_at: demoTimestamp(84), permalink: "https://news.ycombinator.com/item?id=47708818", url: "https://arhan.sh/blog/native-instant-space-switching-on-macos/" },
+  { story_id: 47703419, source_feed: "topstories", title: "Meta removes ads for social media addiction litigation", score: 624, num_comments: 248, collected_at: demoTimestamp(96), permalink: "https://news.ycombinator.com/item?id=47703419", url: "https://www.axios.com/2026/04/09/meta-social-media-addiction-ads" },
+  { story_id: 47704804, source_feed: "newstories", title: "How NASA built Artemis II’s fault-tolerant computer", score: 613, num_comments: 222, collected_at: demoTimestamp(108), permalink: "https://news.ycombinator.com/item?id=47704804", url: "https://cacm.acm.org/news/how-nasa-built-artemis-iis-fault-tolerant-computer/" },
+  { story_id: 48309233, source_feed: "topstories", title: "UC faculty demand a return to SAT tests for STEM", score: 603, num_comments: 801, collected_at: demoTimestamp(120), permalink: "https://news.ycombinator.com/item?id=48309233", url: "https://www.latimes.com/california/story/2026-05-27/uc-math-professors-demand-return-of-sat-for-stem-admissions" },
+  { story_id: 47716490, source_feed: "newstories", title: "FBI used iPhone notification data to retrieve deleted Signal messages", score: 588, num_comments: 290, collected_at: demoTimestamp(132), permalink: "https://news.ycombinator.com/item?id=47716490", url: "https://9to5mac.com/2026/04/09/fbi-used-iphone-notification-data-to-retrieve-deleted-signal-messages/" },
+  { story_id: 48326802, source_feed: "topstories", title: "SQLite is all you need for durable workflows", score: 568, num_comments: 285, collected_at: demoTimestamp(144), permalink: "https://news.ycombinator.com/item?id=48326802", url: "https://obeli.sk/blog/sqlite-is-all-you-need-for-durable-workflows/" },
+  { story_id: 48315968, source_feed: "newstories", title: "GitHub bans security researcher who posted zero-day Windows exploits", score: 541, num_comments: 251, collected_at: demoTimestamp(156), permalink: "https://news.ycombinator.com/item?id=48315968", url: "https://www.tomshardware.com/tech-industry/cyber-security/microsofts-github-bans-security-researcher-who-posted-zero-day-windows-exploits-because-company-ruined-their-life-expert-claims-action-is-vindictive-and-promises-further-retaliation" },
+  { story_id: 47719486, source_feed: "topstories", title: "France to ditch Windows for Linux to reduce reliance on US tech", score: 508, num_comments: 637, collected_at: demoTimestamp(168), permalink: "https://news.ycombinator.com/item?id=47719486", url: "https://techcrunch.com/2026/04/10/france-to-ditch-windows-for-linux-to-reduce-reliance-on-us-tech/" },
 ];
 
 const demoMetrics = [
@@ -187,12 +201,15 @@ function makeDemoData(): DashboardData {
         { label: "neutral", count: 4 }, { label: "mixed", count: 2 },
       ],
       keyword_bubbles: [
-        { keyword: "AI", weight: 100, story_count: 8 }, { keyword: "LLMs", weight: 45, story_count: 4 },
-        { keyword: "Programming", weight: 33, story_count: 5 }, { keyword: "Data", weight: 38, story_count: 4 },
-        { keyword: "Security", weight: 28, story_count: 3 }, { keyword: "Tools", weight: 24, story_count: 3 },
-        { keyword: "Open Source", weight: 20, story_count: 3 },
+        { keyword: "AI", raw_keyword: "ai", weight: 100, story_count: 5, stories: [demoStories[1], demoStories[3], demoStories[7], demoStories[15], demoStories[20]] },
+        { keyword: "Security", raw_keyword: "security", weight: 58, story_count: 5, stories: [demoStories[4], demoStories[5], demoStories[18], demoStories[20], demoStories[21]] },
+        { keyword: "Programming", raw_keyword: "programming", weight: 52, story_count: 5, stories: [demoStories[0], demoStories[2], demoStories[10], demoStories[14], demoStories[19]] },
+        { keyword: "Open Source", raw_keyword: "open source", weight: 46, story_count: 4, stories: [demoStories[5], demoStories[19], demoStories[20], demoStories[21]] },
+        { keyword: "Developer Tools", raw_keyword: "developer tools", weight: 41, story_count: 5, stories: [demoStories[0], demoStories[2], demoStories[5], demoStories[14], demoStories[19]] },
+        { keyword: "Data", raw_keyword: "data", weight: 35, story_count: 4, stories: [demoStories[7], demoStories[18], demoStories[19], demoStories[20]] },
+        { keyword: "Space", raw_keyword: "space", weight: 26, story_count: 3, stories: [demoStories[9], demoStories[14], demoStories[16]] },
       ],
-      notable_stories: demoStories.slice(0, 5),
+      notable_stories: demoStories.slice(0, 8),
     },
     stories: demoStories,
     anomalies: demoAnomalies,
@@ -211,6 +228,21 @@ function formatTime(value: unknown) {
   return Number.isNaN(date.getTime())
     ? "—"
     : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatDateTime(value: unknown) {
+  const date = new Date(String(value || ""));
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function storyHref(story: Row) {
+  return String(story.url || story.permalink || `https://news.ycombinator.com/item?id=${story.story_id}`);
+}
+
+function discussionHref(story: Row) {
+  return String(story.permalink || `https://news.ycombinator.com/item?id=${story.story_id}`);
 }
 
 function apiBase() {
@@ -333,11 +365,16 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [activeView, setActiveView] = useState<"overview" | "intelligence" | "investigations" | "stories">("overview");
   const [search, setSearch] = useState("");
   const [feed, setFeed] = useState("all");
+  const [timeWindow, setTimeWindow] = useState("current");
+  const [rankBy, setRankBy] = useState("score");
+  const [flagFilter, setFlagFilter] = useState("all");
+  const [storyPage, setStoryPage] = useState(1);
   const [openBrief, setOpenBrief] = useState<number | string | null>(1);
-  const [storyLimit, setStoryLimit] = useState(18);
   const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
+  const [selectedWindowIndex, setSelectedWindowIndex] = useState<number | null>(null);
 
   const refresh = async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -362,12 +399,50 @@ export default function Dashboard() {
 
   const filteredStories = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return (data?.stories || []).filter((story) => {
+    const terms = query.split(/\s+/).filter(Boolean);
+    const stories = [...(data?.stories || [])];
+    const notableIds = new Set(
+      (data?.intelligence?.notable_stories || []).map((story: Row) => String(story.story_id)),
+    );
+    const anomalyFeeds = new Set((data?.anomalies || []).map((item: Row) => item.source_feed));
+    const newestObservedAt = Math.max(
+      ...stories.map((story) => new Date(String(story.collected_at || 0)).getTime()).filter(Number.isFinite),
+      0,
+    );
+    const cutoffHours = timeWindow === "24h" ? 24 : timeWindow === "7d" ? 168 : null;
+
+    const filtered = stories.filter((story) => {
+      const title = String(story.title || "").toLowerCase();
+      const observedAt = new Date(String(story.collected_at || 0)).getTime();
       const matchesFeed = feed === "all" || story.source_feed === feed;
-      const matchesText = !query || String(story.title || "").toLowerCase().includes(query);
-      return matchesFeed && matchesText;
+      const matchesText = terms.every((term) => title.includes(term));
+      const matchesTime = cutoffHours === null || (
+        Number.isFinite(observedAt) && observedAt >= newestObservedAt - cutoffHours * 60 * 60 * 1000
+      );
+      const isBriefing = notableIds.has(String(story.story_id));
+      const isAnomaly = anomalyFeeds.has(story.source_feed);
+      const matchesFlag = flagFilter === "all"
+        || (flagFilter === "briefing" && isBriefing)
+        || (flagFilter === "anomaly" && isAnomaly);
+      return matchesFeed && matchesText && matchesTime && matchesFlag;
     });
-  }, [data, search, feed]);
+
+    return filtered.sort((a, b) => {
+      if (rankBy === "comments") return Number(b.num_comments || 0) - Number(a.num_comments || 0);
+      if (rankBy === "engagement") {
+        return (Number(b.score || 0) + Number(b.num_comments || 0))
+          - (Number(a.score || 0) + Number(a.num_comments || 0));
+      }
+      if (rankBy === "newest") {
+        return new Date(String(b.collected_at || 0)).getTime() - new Date(String(a.collected_at || 0)).getTime();
+      }
+      return Number(b.score || 0) - Number(a.score || 0);
+    });
+  }, [data, search, feed, timeWindow, rankBy, flagFilter]);
+
+  useEffect(() => {
+    setStoryPage(1);
+  }, [search, feed, timeWindow, rankBy, flagFilter, data]);
 
   if (loading || !data) {
     return (
@@ -397,7 +472,17 @@ export default function Dashboard() {
   const totalComments = data.stories.reduce((sum, row) => sum + Number(row.num_comments || 0), 0);
   const emergingTopics = (intelligence.ranked_themes || []).slice(0, 5);
   const maxTopicScore = Math.max(...emergingTopics.map((item: Row) => Number(item.score || 0)), 1);
-  const visibleStories = filteredStories.slice(0, storyLimit);
+  const storyPageSize = 10;
+  const storyTotalPages = Math.max(1, Math.ceil(filteredStories.length / storyPageSize));
+  const safeStoryPage = Math.min(storyPage, storyTotalPages);
+  const visibleStories = filteredStories.slice((safeStoryPage - 1) * storyPageSize, safeStoryPage * storyPageSize);
+  const notableStoryIds = new Set(
+    (intelligence.notable_stories || []).map((story: Row) => String(story.story_id)),
+  );
+  const anomalyFeeds = new Set(anomalies.map((item: Row) => item.source_feed));
+  const selectedWindowStories = selectedWindowIndex === null
+    ? []
+    : data.stories.slice(selectedWindowIndex % Math.max(data.stories.length - 2, 1), (selectedWindowIndex % Math.max(data.stories.length - 2, 1)) + 3);
   const selectedKeywordItem = (intelligence.keyword_bubbles || []).find(
     (item: Row) => item.keyword === selectedKeyword,
   );
@@ -467,95 +552,145 @@ export default function Dashboard() {
         <MetricCard label="Active alerts" value={formatNumber(alertCount)} note={`${anomalies.length} signals under triage`} alert={alertCount > 0} />
       </section>
 
-      <section className="operations-grid">
-        <Panel title="Signal overview" className="signal-overview-panel">
-          <div className="overview-stats">
-            <span><small>Signals</small><b>{formatNumber(counts.stories || data.stories.length)}</b></span>
-            <span><small>Trending</small><b className="cyan-value">{formatNumber(totalComments)}</b></span>
-            <span><small>Emerging</small><b className="orange-value">{formatNumber(emergingTopics.length)}</b></span>
-            <span><small>Anomalies</small><b className="red-value">{formatNumber(anomalies.length)}</b></span>
-          </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={metricData}>
-              <CartesianGrid stroke="rgba(112,151,204,.10)" vertical={false} />
-              <XAxis dataKey="time" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={42} />
-              <Tooltip content={<ChartTooltip />} />
-              <Line type="monotone" dataKey="engagement_score" name="Signal intensity" stroke={COLORS.cyan} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="story_volume" name="Story volume" stroke={COLORS.blue} strokeWidth={1.2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </Panel>
-        <Panel title="Command center" className="operations-status-panel">
-          <div className={alertCount ? "operations-alert active" : "operations-alert"}>
-            <AlertTriangle size={18} />
-            <span><b>{alertCount ? "Anomaly detected" : "Monitoring stable"}</b><small>{alertCount ? "High-confidence signal requires review" : "All monitored feeds are within range"}</small></span>
-            <em>{alertCount ? "Now" : "Healthy"}</em>
-          </div>
-          <div className="operations-status-list">
-            {statusRows.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div key={item.label}>
-                  <Icon size={18} />
-                  <span><b>{item.label}</b><small>{item.detail}</small></span>
-                  <strong>{item.value}</strong>
-                </div>
-              );
-            })}
-          </div>
-        </Panel>
+      <nav className="workspace-tabs" aria-label="Dashboard sections">
+        {[
+          ["overview", "Overview", "Signals and live activity"],
+          ["intelligence", "AI intelligence", "Themes and story links"],
+          ["investigations", "Investigations", `${eventBriefs.length} evidence briefs`],
+          ["stories", "Story explorer", `${data.stories.length} monitored stories`],
+        ].map(([id, label, detail]) => (
+          <button
+            type="button"
+            key={id}
+            aria-pressed={activeView === id}
+            onClick={() => setActiveView(id as typeof activeView)}
+          >
+            <b>{label}</b>
+            <small>{detail}</small>
+          </button>
+        ))}
+      </nav>
 
-        <Panel title="Top emerging topics" className="emerging-panel">
-          <div className="emerging-list">
-            {emergingTopics.map((item: Row, index: number) => {
-              const isSelected = selectedKeyword === item.theme;
-              return (
-                <button
-                  type="button"
-                  key={item.theme}
-                  aria-pressed={isSelected}
-                  onClick={() => setSelectedKeyword(isSelected ? null : item.theme)}
-                >
-                  <span><b>{item.theme}</b><em>{formatNumber(item.score)}</em></span>
-                  <i><span style={{ width: `${Math.max(14, (Number(item.score || 0) / maxTopicScore) * 100)}%`, opacity: 1 - index * 0.1 }} /></i>
-                </button>
-              );
-            })}
-          </div>
-        </Panel>
-        <Panel title="Signal velocity" className="velocity-panel">
-          <ResponsiveContainer width="100%" height={185}>
-            <ScatterChart margin={{ left: 2, right: 20, top: 8, bottom: 0 }}>
-              <CartesianGrid stroke="rgba(112,151,204,.10)" />
-              <XAxis type="number" dataKey="volume" name="Volume" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis type="number" dataKey="velocity" name="Velocity" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={40} />
-              <ZAxis type="number" dataKey="size" range={[55, 190]} />
-              <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltip />} />
-              <Scatter data={scatterData}>
-                {scatterData.map((item, index) => <Cell key={item.id || index} fill={item.news_aligned ? COLORS.orange : COLORS.cyan} />)}
-              </Scatter>
-            </ScatterChart>
-          </ResponsiveContainer>
-        </Panel>
-        <Panel title="Signal feed (live)" className="signal-feed-panel">
-          <div className="signal-feed-list">
-            {data.stories.slice(0, 5).map((story, index) => (
-              <a href={story.permalink || story.url} target="_blank" rel="noreferrer" key={story.story_id}>
-                <time>{formatTime(story.collected_at)}</time>
-                <span className={story.source_feed === "topstories" ? "feed-kind hot" : "feed-kind"}>{story.source_feed === "topstories" ? "Top" : "New"}</span>
-                <b>{story.title}</b>
-                <i className="micro-trend" aria-hidden="true">
-                  {[32, 45, 39, 64, 48, 75, 57].map((height, point) => (
-                    <span key={point} style={{ height: `${Math.max(14, height - index * 4)}%` }} />
+      {activeView === "overview" && (
+        <>
+          <section className="operations-grid">
+            <div className="operations-main">
+              <Panel title="Signal overview" className="signal-overview-panel">
+                <div className="overview-stats">
+                  <span><small>Signals</small><b>{formatNumber(counts.stories || data.stories.length)}</b></span>
+                  <span><small>Trending</small><b className="cyan-value">{formatNumber(totalComments)}</b></span>
+                  <span><small>Emerging</small><b className="orange-value">{formatNumber(emergingTopics.length)}</b></span>
+                  <span><small>Anomalies</small><b className="red-value">{formatNumber(anomalies.length)}</b></span>
+                </div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart
+                    data={metricData}
+                    onClick={(state: Row) => {
+                      const index = Number(state?.activeTooltipIndex);
+                      if (Number.isInteger(index)) setSelectedWindowIndex(index);
+                    }}
+                  >
+                    <CartesianGrid stroke="rgba(112,151,204,.10)" vertical={false} />
+                    <XAxis dataKey="time" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={42} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Line type="monotone" dataKey="engagement_score" name="Signal intensity" stroke={COLORS.cyan} strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
+                    <Line type="monotone" dataKey="story_volume" name="Story volume" stroke={COLORS.blue} strokeWidth={1.2} dot={false} activeDot={{ r: 4 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+                <div className="chart-action-row">
+                  <span>Click a point to inspect stories from that signal window.</span>
+                  {selectedWindowIndex !== null && <button type="button" onClick={() => setSelectedWindowIndex(null)}>Close detail</button>}
+                </div>
+                {selectedWindowIndex !== null && (
+                  <div className="trend-story-detail">
+                    <strong>{metricData[selectedWindowIndex]?.time || "Selected window"} · {selectedWindowStories.length} related stories</strong>
+                    {selectedWindowStories.map((story) => (
+                      <a href={storyHref(story)} target="_blank" rel="noreferrer" key={story.story_id}>
+                        <span>{story.title}</span>
+                        <small>{formatNumber(story.score)} pts</small>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </Panel>
+              <div className="operations-subgrid">
+                <Panel title="Top emerging topics" className="emerging-panel">
+                  <div className="emerging-list">
+                    {emergingTopics.map((item: Row, index: number) => {
+                      const isSelected = selectedKeyword === item.theme;
+                      return (
+                        <button
+                          type="button"
+                          key={item.theme}
+                          aria-pressed={isSelected}
+                          onClick={() => {
+                            setSelectedKeyword(isSelected ? null : item.theme);
+                            setActiveView("intelligence");
+                          }}
+                        >
+                          <span><b>{item.theme}</b><em>{formatNumber(item.score)}</em></span>
+                          <i><span style={{ width: `${Math.max(14, (Number(item.score || 0) / maxTopicScore) * 100)}%`, opacity: 1 - index * 0.1 }} /></i>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Panel>
+                <Panel title="Signal velocity" className="velocity-panel">
+                  <ResponsiveContainer width="100%" height={185}>
+                    <ScatterChart margin={{ left: 2, right: 20, top: 8, bottom: 0 }}>
+                      <CartesianGrid stroke="rgba(112,151,204,.10)" />
+                      <XAxis type="number" dataKey="volume" name="Volume" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <YAxis type="number" dataKey="velocity" name="Velocity" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={40} />
+                      <ZAxis type="number" dataKey="size" range={[55, 190]} />
+                      <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltip />} />
+                      <Scatter data={scatterData}>
+                        {scatterData.map((item, index) => <Cell key={item.id || index} fill={item.news_aligned ? COLORS.orange : COLORS.cyan} />)}
+                      </Scatter>
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                </Panel>
+              </div>
+            </div>
+            <aside className="operations-rail">
+              <Panel title="Live status" className="operations-status-panel">
+                <div className={alertCount ? "operations-alert active" : "operations-alert"}>
+                  <AlertTriangle size={18} />
+                  <span><b>{alertCount ? "Anomaly detected" : "Monitoring stable"}</b><small>{alertCount ? "High-confidence signal requires review" : "All monitored feeds are within range"}</small></span>
+                  <em>{alertCount ? "Now" : "Healthy"}</em>
+                </div>
+                <div className="operations-status-list">
+                  {statusRows.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <div key={item.label}>
+                        <Icon size={18} />
+                        <span><b>{item.label}</b><small>{item.detail}</small></span>
+                        <strong>{item.value}</strong>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Panel>
+              <Panel title="Signal feed (live)" className="signal-feed-panel">
+                <div className="signal-feed-list">
+                  {data.stories.slice(0, 7).map((story, index) => (
+                    <a href={storyHref(story)} target="_blank" rel="noreferrer" key={story.story_id}>
+                      <time>{formatTime(story.collected_at)}</time>
+                      <span className={story.source_feed === "topstories" ? "feed-kind hot" : "feed-kind"}>{story.source_feed === "topstories" ? "Top" : "New"}</span>
+                      <b>{story.title}</b>
+                      <i className="micro-trend" aria-hidden="true">
+                        {[32, 45, 39, 64, 48, 75, 57].map((height, point) => (
+                          <span key={point} style={{ height: `${Math.max(14, height - index * 4)}%` }} />
+                        ))}
+                      </i>
+                      <strong>↑ {formatNumber(Number(story.score || 0) + Number(story.num_comments || 0))}</strong>
+                    </a>
                   ))}
-                </i>
-                <strong>↑ {formatNumber(Number(story.score || 0) + Number(story.num_comments || 0))}</strong>
-              </a>
-            ))}
-          </div>
-        </Panel>
-      </section>
+                </div>
+              </Panel>
+            </aside>
+          </section>
 
       <Panel title="Top feed new entries" className="top-entry-panel">
         <div className="table-intro">
@@ -564,7 +699,7 @@ export default function Dashboard() {
         </div>
         <div className="compact-table">
           {data.stories.slice(0, 5).map((story) => (
-            <a href={story.permalink || story.url} target="_blank" rel="noreferrer" key={story.story_id}>
+            <a href={storyHref(story)} target="_blank" rel="noreferrer" key={story.story_id}>
               <span>{story.title}</span>
               <b>{formatNumber(story.score)}</b>
               <em>{formatNumber(story.num_comments)} comments</em>
@@ -583,7 +718,7 @@ export default function Dashboard() {
               <div className="score-row" key={story.story_id}>
                 <div className="score-track">
                   <span style={{ width: `${width}%`, opacity: 1 - index * 0.09 }} />
-                  <a href={story.permalink || story.url} target="_blank" rel="noreferrer">{story.title}</a>
+                  <a href={storyHref(story)} target="_blank" rel="noreferrer">{story.title}</a>
                 </div>
                 <b>{formatNumber(story.score)}</b>
               </div>
@@ -591,7 +726,10 @@ export default function Dashboard() {
           })}
         </div>
       </Panel>
+        </>
+      )}
 
+      {activeView === "intelligence" && (
       <section className="intelligence-section">
         <SectionHeader eyebrow="AI intelligence" title="Evidence-backed signal briefing" copy="Concise model output, grounded in the stories and external context selected by the monitoring pipeline." />
         <div className="ai-grid">
@@ -662,7 +800,7 @@ export default function Dashboard() {
             </div>
             <div className="notable-list">
               {matchedStories.slice(0, 7).map((story: Row) => (
-                <a href={story.permalink || story.url} target="_blank" rel="noreferrer" key={story.story_id}>
+                <a href={storyHref(story)} target="_blank" rel="noreferrer" key={story.story_id}>
                   <span>{story.title}</span>
                   <small>{formatNumber(story.score)} pts · {formatNumber(story.num_comments)} comments</small>
                 </a>
@@ -672,7 +810,9 @@ export default function Dashboard() {
           </Panel>
         </div>
       </section>
+      )}
 
+      {activeView === "investigations" && (
       <section className="event-section">
         <SectionHeader eyebrow="Event briefs" title="Investigation queue" copy={`${eventBriefs.length} evidence-grounded cases available for analyst review.`} />
         <div className="brief-accordion">
@@ -704,7 +844,9 @@ export default function Dashboard() {
           })}
         </div>
       </section>
+      )}
 
+      {activeView === "stories" && (
       <section className="story-section">
         <SectionHeader
           eyebrow="Story explorer"
@@ -714,43 +856,79 @@ export default function Dashboard() {
         />
         <div className="story-panel">
           <div className="story-toolbar">
-            <label><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search titles or keywords" /></label>
-            <select value={feed} onChange={(event) => setFeed(event.target.value)}>
+            <label className="story-search"><span>Search</span><span><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Titles or keywords" /></span></label>
+            <label><span>Time window</span><select value={timeWindow} onChange={(event) => setTimeWindow(event.target.value)}>
+              <option value="current">Current snapshot</option>
+              <option value="24h">Last 24 hours</option>
+              <option value="7d">Last 7 days</option>
+            </select></label>
+            <label><span>Rank by</span><select value={rankBy} onChange={(event) => setRankBy(event.target.value)}>
+              <option value="score">Highest score</option>
+              <option value="comments">Most comments</option>
+              <option value="engagement">Highest engagement</option>
+              <option value="newest">Newest</option>
+            </select></label>
+            <label><span>Feed</span><select value={feed} onChange={(event) => setFeed(event.target.value)}>
               <option value="all">All feeds</option>
               <option value="topstories">Top stories</option>
               <option value="newstories">New stories</option>
               <option value="beststories">Best stories</option>
-            </select>
-            <span>Showing {Math.min(storyLimit, filteredStories.length)} of {filteredStories.length}</span>
-            {filteredStories.length > 18 && (
-              <button
-                className="density-toggle"
-                type="button"
-                onClick={() => setStoryLimit((limit) => limit > 18 ? 18 : Math.min(40, filteredStories.length))}
-              >
-                {storyLimit > 18 ? "Compact view" : "Expand list"}
-              </button>
-            )}
+            </select></label>
+            <label><span>Evidence flag</span><select value={flagFilter} onChange={(event) => setFlagFilter(event.target.value)}>
+              <option value="all">All signals</option>
+              <option value="briefing">★ Briefing evidence</option>
+              <option value="anomaly">⚠ Anomaly-adjacent</option>
+            </select></label>
           </div>
-          <div className={storyLimit > 18 ? "story-table-wrap expanded" : "story-table-wrap"}>
+          <div className="story-table-summary">
+            <span>★ briefing evidence · ⚠ anomaly-adjacent</span>
+            <b>
+              {filteredStories.length
+                ? `${(safeStoryPage - 1) * storyPageSize + 1}–${Math.min(safeStoryPage * storyPageSize, filteredStories.length)} of ${filteredStories.length}`
+                : "0 stories"}
+            </b>
+          </div>
+          <div className="story-table-wrap">
             <table>
-              <thead><tr><th>Feed</th><th>Story</th><th>Score</th><th>Comments</th><th>Observed</th><th>Link</th></tr></thead>
+              <thead><tr><th>Flag</th><th>Feed</th><th>Story</th><th>Score</th><th>Comments</th><th>Observed</th><th>Discussion</th></tr></thead>
               <tbody>
-                {visibleStories.map((story) => (
-                  <tr key={`${story.story_id}-${story.source_feed}`}>
-                    <td><span className="feed-chip">{story.source_feed}</span></td>
-                    <td>{story.title}</td>
-                    <td>{formatNumber(story.score)}</td>
-                    <td>{formatNumber(story.num_comments)}</td>
-                    <td>{formatTime(story.collected_at)}</td>
-                    <td><a href={story.permalink || story.url} target="_blank" rel="noreferrer" aria-label={`Open ${story.title}`}><ExternalLink size={15} /></a></td>
-                  </tr>
-                ))}
+                {visibleStories.map((story) => {
+                  const isBriefing = notableStoryIds.has(String(story.story_id));
+                  const isAnomaly = anomalyFeeds.has(story.source_feed);
+                  return (
+                    <tr key={`${story.story_id}-${story.source_feed}`}>
+                      <td className="story-flag">{isBriefing ? "★" : isAnomaly ? "⚠" : ""}</td>
+                      <td><span className="feed-chip">{story.source_feed}</span></td>
+                      <td><a className="story-title-link" href={storyHref(story)} target="_blank" rel="noreferrer">{story.title}</a></td>
+                      <td>{formatNumber(story.score)}</td>
+                      <td>{formatNumber(story.num_comments)}</td>
+                      <td>{formatDateTime(story.collected_at)}</td>
+                      <td><a href={discussionHref(story)} target="_blank" rel="noreferrer" aria-label={`Open Hacker News discussion for ${story.title}`}><ExternalLink size={15} /></a></td>
+                    </tr>
+                  );
+                })}
+                {visibleStories.length === 0 && <tr><td colSpan={7} className="empty-table">No stories match the selected filters.</td></tr>}
               </tbody>
             </table>
           </div>
+          <div className="pagination-controls" aria-label="Story pages">
+            <button type="button" onClick={() => setStoryPage(Math.max(1, safeStoryPage - 1))} disabled={safeStoryPage === 1}>Previous</button>
+            {Array.from({ length: storyTotalPages }, (_, index) => index + 1).map((page) => (
+              <button
+                type="button"
+                key={page}
+                className={page === safeStoryPage ? "active" : ""}
+                aria-current={page === safeStoryPage ? "page" : undefined}
+                onClick={() => setStoryPage(page)}
+              >
+                {page}
+              </button>
+            ))}
+            <button type="button" onClick={() => setStoryPage(Math.min(storyTotalPages, safeStoryPage + 1))} disabled={safeStoryPage === storyTotalPages}>Next</button>
+          </div>
         </div>
       </section>
+      )}
 
       <footer>
         <span><Activity size={14} /> Sonar AI</span>
