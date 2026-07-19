@@ -25,7 +25,7 @@ frontend:
 	cd frontend && npm run dev
 
 test:
-	$(PYTEST)
+	PYTHONPATH=. $(PYTEST)
 
 docker-up:
 	docker compose up --build
