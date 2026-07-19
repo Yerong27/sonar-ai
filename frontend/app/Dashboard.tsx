@@ -293,22 +293,34 @@ function ChartTooltip({ active, payload, label }: Row) {
   );
 }
 
-function BubbleField({ items }: { items: Row[] }) {
+function BubbleField({
+  items,
+  selectedKeyword,
+  onSelectKeyword,
+}: {
+  items: Row[];
+  selectedKeyword: string | null;
+  onSelectKeyword: (keyword: string | null) => void;
+}) {
   const slots = [[50, 48], [23, 42], [78, 42], [30, 72], [69, 72], [15, 70], [85, 72]];
   const max = Math.max(...items.map((item) => Number(item.weight || 1)), 1);
   return (
     <div className="bubble-field" aria-label="Keyword explorer">
       {items.slice(0, slots.length).map((item, index) => {
         const size = 48 + (Number(item.weight || 1) / max) * 78;
+        const isSelected = selectedKeyword === item.keyword;
         return (
           <button
             type="button"
-            className={index === 0 ? "bubble-node primary" : "bubble-node"}
+            className={`bubble-node${index === 0 ? " primary" : ""}${isSelected ? " selected" : ""}`}
             key={item.keyword}
             style={{ left: `${slots[index][0]}%`, top: `${slots[index][1]}%`, width: size, height: size }}
-            title={`${item.story_count || 0} related stories`}
+            aria-label={`Filter notable stories by ${item.keyword}`}
+            aria-pressed={isSelected}
+            onClick={() => onSelectKeyword(isSelected ? null : item.keyword)}
           >
-            {item.keyword}
+            <span>{item.keyword}</span>
+            <small>{item.story_count || 0}</small>
           </button>
         );
       })}
@@ -325,6 +337,7 @@ export default function Dashboard() {
   const [feed, setFeed] = useState("all");
   const [openBrief, setOpenBrief] = useState<number | string | null>(1);
   const [storyLimit, setStoryLimit] = useState(18);
+  const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
 
   const refresh = async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -385,6 +398,20 @@ export default function Dashboard() {
   const emergingTopics = (intelligence.ranked_themes || []).slice(0, 5);
   const maxTopicScore = Math.max(...emergingTopics.map((item: Row) => Number(item.score || 0)), 1);
   const visibleStories = filteredStories.slice(0, storyLimit);
+  const selectedKeywordItem = (intelligence.keyword_bubbles || []).find(
+    (item: Row) => item.keyword === selectedKeyword,
+  );
+  const selectedTokens = String(
+    selectedKeywordItem?.raw_keyword || selectedKeyword || "",
+  ).toLowerCase().split(/\s+/).filter(Boolean);
+  const matchedStories = selectedKeyword
+    ? ((selectedKeywordItem?.stories || []).length
+      ? selectedKeywordItem.stories
+      : data.stories.filter((story) => {
+          const title = String(story.title || "").toLowerCase();
+          return selectedTokens.some((token) => title.includes(token));
+        }))
+    : (intelligence.notable_stories || data.stories);
   const statusRows = [
     { icon: Wifi, label: "Data stream", detail: data.mode === "live" ? "Healthy" : "Demo snapshot", value: data.mode === "live" ? "Live" : "Ready" },
     { icon: Radio, label: "Coverage", detail: "Hacker News feeds", value: `${data.overview.feed_summary?.length || 2} feeds` },
@@ -448,11 +475,11 @@ export default function Dashboard() {
             <span><small>Emerging</small><b className="orange-value">{formatNumber(emergingTopics.length)}</b></span>
             <span><small>Anomalies</small><b className="red-value">{formatNumber(anomalies.length)}</b></span>
           </div>
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={220}>
             <LineChart data={metricData}>
               <CartesianGrid stroke="rgba(112,151,204,.10)" vertical={false} />
-              <XAxis dataKey="time" tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} width={36} />
+              <XAxis dataKey="time" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={42} />
               <Tooltip content={<ChartTooltip />} />
               <Line type="monotone" dataKey="engagement_score" name="Signal intensity" stroke={COLORS.cyan} strokeWidth={2} dot={false} />
               <Line type="monotone" dataKey="story_volume" name="Story volume" stroke={COLORS.blue} strokeWidth={1.2} dot={false} />
@@ -481,20 +508,28 @@ export default function Dashboard() {
 
         <Panel title="Top emerging topics" className="emerging-panel">
           <div className="emerging-list">
-            {emergingTopics.map((item: Row, index: number) => (
-              <div key={item.theme}>
-                <span><b>{item.theme}</b><em>{formatNumber(item.score)}</em></span>
-                <i><span style={{ width: `${Math.max(14, (Number(item.score || 0) / maxTopicScore) * 100)}%`, opacity: 1 - index * 0.1 }} /></i>
-              </div>
-            ))}
+            {emergingTopics.map((item: Row, index: number) => {
+              const isSelected = selectedKeyword === item.theme;
+              return (
+                <button
+                  type="button"
+                  key={item.theme}
+                  aria-pressed={isSelected}
+                  onClick={() => setSelectedKeyword(isSelected ? null : item.theme)}
+                >
+                  <span><b>{item.theme}</b><em>{formatNumber(item.score)}</em></span>
+                  <i><span style={{ width: `${Math.max(14, (Number(item.score || 0) / maxTopicScore) * 100)}%`, opacity: 1 - index * 0.1 }} /></i>
+                </button>
+              );
+            })}
           </div>
         </Panel>
         <Panel title="Signal velocity" className="velocity-panel">
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={185}>
             <ScatterChart margin={{ left: 2, right: 20, top: 8, bottom: 0 }}>
               <CartesianGrid stroke="rgba(112,151,204,.10)" />
-              <XAxis type="number" dataKey="volume" name="Volume" tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
-              <YAxis type="number" dataKey="velocity" name="Velocity" tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} width={34} />
+              <XAxis type="number" dataKey="volume" name="Volume" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis type="number" dataKey="velocity" name="Velocity" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={40} />
               <ZAxis type="number" dataKey="size" range={[55, 190]} />
               <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltip />} />
               <Scatter data={scatterData}>
@@ -546,8 +581,10 @@ export default function Dashboard() {
             const width = Math.max(12, (Number(story.score || 0) / max) * 100);
             return (
               <div className="score-row" key={story.story_id}>
-                <a href={story.permalink || story.url} target="_blank" rel="noreferrer">{story.title}</a>
-                <div className="score-track"><span style={{ width: `${width}%`, opacity: 1 - index * 0.09 }} /></div>
+                <div className="score-track">
+                  <span style={{ width: `${width}%`, opacity: 1 - index * 0.09 }} />
+                  <a href={story.permalink || story.url} target="_blank" rel="noreferrer">{story.title}</a>
+                </div>
                 <b>{formatNumber(story.score)}</b>
               </div>
             );
@@ -582,22 +619,22 @@ export default function Dashboard() {
             </ol>
           </Panel>
           <Panel title="Heading visibility" className="visibility-panel">
-            <ResponsiveContainer width="100%" height={245}>
-              <BarChart data={(intelligence.heading_visibility || []).slice(0, 6)} layout="vertical" margin={{ left: 20, right: 18 }}>
+            <ResponsiveContainer width="100%" height={210}>
+              <BarChart data={(intelligence.heading_visibility || []).slice(0, 6)} layout="vertical" margin={{ left: 6, right: 18 }}>
                 <CartesianGrid stroke="rgba(112,151,204,.10)" horizontal={false} />
-                <XAxis type="number" tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="keyword" width={80} tick={{ fill: "#a6bad5", fontSize: 10 }} axisLine={false} tickLine={false} />
+                <XAxis type="number" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="keyword" width={92} tick={{ fill: "#c3d2e3", fontSize: 12 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Bar dataKey="visibility" name="Visibility" fill={COLORS.cyan} radius={[0, 3, 3, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </Panel>
           <Panel title="Signal sentiment" className="sentiment-panel">
-            <ResponsiveContainer width="100%" height={245}>
+            <ResponsiveContainer width="100%" height={210}>
               <BarChart data={intelligence.sentiment_distribution || []}>
                 <CartesianGrid stroke="rgba(112,151,204,.10)" vertical={false} />
-                <XAxis dataKey="label" tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} width={25} />
+                <XAxis dataKey="label" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={30} />
                 <Tooltip content={<ChartTooltip />} />
                 <Bar dataKey="count" name="Briefs" radius={[3, 3, 0, 0]}>
                   {(intelligence.sentiment_distribution || []).map((item: Row) => (
@@ -608,16 +645,29 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </Panel>
           <Panel title="Keywords explorer" className="keyword-panel">
-            <BubbleField items={intelligence.keyword_bubbles || []} />
+            <div className="interactive-panel-heading">
+              <span>Click a topic to filter stories</span>
+              {selectedKeyword && <button type="button" onClick={() => setSelectedKeyword(null)}>Clear filter</button>}
+            </div>
+            <BubbleField
+              items={intelligence.keyword_bubbles || []}
+              selectedKeyword={selectedKeyword}
+              onSelectKeyword={setSelectedKeyword}
+            />
           </Panel>
           <Panel title="Notable stories" className="notable-panel">
+            <div className="interactive-panel-heading">
+              <span>{selectedKeyword ? `Filtered by “${selectedKeyword}”` : "Highest-signal stories"}</span>
+              <b>{matchedStories.length} stories</b>
+            </div>
             <div className="notable-list">
-              {(intelligence.notable_stories || []).slice(0, 6).map((story: Row) => (
+              {matchedStories.slice(0, 7).map((story: Row) => (
                 <a href={story.permalink || story.url} target="_blank" rel="noreferrer" key={story.story_id}>
                   <span>{story.title}</span>
                   <small>{formatNumber(story.score)} pts · {formatNumber(story.num_comments)} comments</small>
                 </a>
               ))}
+              {matchedStories.length === 0 && <p className="empty-filter">No stories match this topic in the current window.</p>}
             </div>
           </Panel>
         </div>
