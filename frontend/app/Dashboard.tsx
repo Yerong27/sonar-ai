@@ -5,11 +5,14 @@ import {
   Activity,
   AlertTriangle,
   ChevronDown,
+  Database,
   ExternalLink,
+  Radio,
   RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
+  Wifi,
 } from "lucide-react";
 import {
   Bar,
@@ -321,6 +324,7 @@ export default function Dashboard() {
   const [search, setSearch] = useState("");
   const [feed, setFeed] = useState("all");
   const [openBrief, setOpenBrief] = useState<number | string | null>(1);
+  const [storyLimit, setStoryLimit] = useState(18);
 
   const refresh = async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -371,9 +375,23 @@ export default function Dashboard() {
   const scatterData = anomalies.map((row, index) => ({
     ...row,
     timeIndex: index + 1,
+    volume: Math.max(0.1, Number(row.metric_value || index + 1)),
+    velocity: Math.max(0.1, Number(row.z_score || 0)),
     size: Math.max(60, Number(row.metric_value || 1)),
   }));
   const eventBriefs = intelligence.event_briefs || [];
+  const totalScore = data.stories.reduce((sum, row) => sum + Number(row.score || 0), 0);
+  const totalComments = data.stories.reduce((sum, row) => sum + Number(row.num_comments || 0), 0);
+  const emergingTopics = (intelligence.ranked_themes || []).slice(0, 5);
+  const maxTopicScore = Math.max(...emergingTopics.map((item: Row) => Number(item.score || 0)), 1);
+  const visibleStories = filteredStories.slice(0, storyLimit);
+  const statusRows = [
+    { icon: Wifi, label: "Data stream", detail: data.mode === "live" ? "Healthy" : "Demo snapshot", value: data.mode === "live" ? "Live" : "Ready" },
+    { icon: Radio, label: "Coverage", detail: "Hacker News feeds", value: `${data.overview.feed_summary?.length || 2} feeds` },
+    { icon: Database, label: "Signals analyzed", detail: "Current dataset", value: formatNumber(counts.stories || data.stories.length) },
+    { icon: RefreshCw, label: "Refresh rate", detail: "Status-aware polling", value: "60 sec" },
+    { icon: ShieldCheck, label: "Confidence filter", detail: "Evidence-backed", value: "On" },
+  ];
 
   return (
     <main className="dashboard">
@@ -417,40 +435,66 @@ export default function Dashboard() {
 
       <section className="metric-grid">
         <MetricCard label="New stories volume" value={formatNumber(counts.stories || data.stories.length)} note="Current monitored window" />
-        <MetricCard label="Hacker News score" value={formatNumber(data.stories.reduce((sum, row) => sum + Number(row.score || 0), 0))} note="Latest observed story scores" />
-        <MetricCard label="HN comments" value={formatNumber(data.stories.reduce((sum, row) => sum + Number(row.num_comments || 0), 0))} note="Conversation intensity" />
+        <MetricCard label="Hacker News score" value={formatNumber(totalScore)} note="Latest observed story scores" />
+        <MetricCard label="HN comments" value={formatNumber(totalComments)} note="Conversation intensity" />
         <MetricCard label="Active alerts" value={formatNumber(alertCount)} note={`${anomalies.length} signals under triage`} alert={alertCount > 0} />
       </section>
 
-      <section className="chart-trio">
-        <Panel title="New stories created over time">
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={metricData}>
-              <CartesianGrid stroke="rgba(112,151,204,.10)" vertical={false} />
-              <XAxis dataKey="time" tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} width={28} />
-              <Tooltip content={<ChartTooltip />} />
-              <Line type="monotone" dataKey="story_volume" name="Stories" stroke={COLORS.cyan} strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </Panel>
-        <Panel title="Top feed engagement over time">
-          <ResponsiveContainer width="100%" height={250}>
+      <section className="operations-grid">
+        <Panel title="Signal overview" className="signal-overview-panel">
+          <div className="overview-stats">
+            <span><small>Signals</small><b>{formatNumber(counts.stories || data.stories.length)}</b></span>
+            <span><small>Trending</small><b className="cyan-value">{formatNumber(totalComments)}</b></span>
+            <span><small>Emerging</small><b className="orange-value">{formatNumber(emergingTopics.length)}</b></span>
+            <span><small>Anomalies</small><b className="red-value">{formatNumber(anomalies.length)}</b></span>
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
             <LineChart data={metricData}>
               <CartesianGrid stroke="rgba(112,151,204,.10)" vertical={false} />
               <XAxis dataKey="time" tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} width={36} />
               <Tooltip content={<ChartTooltip />} />
-              <Line type="linear" dataKey="engagement_score" name="Engagement" stroke={COLORS.orange} strokeWidth={2} dot={{ r: 2 }} />
+              <Line type="monotone" dataKey="engagement_score" name="Signal intensity" stroke={COLORS.cyan} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="story_volume" name="Story volume" stroke={COLORS.blue} strokeWidth={1.2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </Panel>
-        <Panel title="Anomaly alerts">
-          <ResponsiveContainer width="100%" height={250}>
-            <ScatterChart margin={{ left: 2, right: 18, top: 8, bottom: 0 }}>
+        <Panel title="Command center" className="operations-status-panel">
+          <div className={alertCount ? "operations-alert active" : "operations-alert"}>
+            <AlertTriangle size={18} />
+            <span><b>{alertCount ? "Anomaly detected" : "Monitoring stable"}</b><small>{alertCount ? "High-confidence signal requires review" : "All monitored feeds are within range"}</small></span>
+            <em>{alertCount ? "Now" : "Healthy"}</em>
+          </div>
+          <div className="operations-status-list">
+            {statusRows.map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.label}>
+                  <Icon size={18} />
+                  <span><b>{item.label}</b><small>{item.detail}</small></span>
+                  <strong>{item.value}</strong>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+
+        <Panel title="Top emerging topics" className="emerging-panel">
+          <div className="emerging-list">
+            {emergingTopics.map((item: Row, index: number) => (
+              <div key={item.theme}>
+                <span><b>{item.theme}</b><em>{formatNumber(item.score)}</em></span>
+                <i><span style={{ width: `${Math.max(14, (Number(item.score || 0) / maxTopicScore) * 100)}%`, opacity: 1 - index * 0.1 }} /></i>
+              </div>
+            ))}
+          </div>
+        </Panel>
+        <Panel title="Signal velocity" className="velocity-panel">
+          <ResponsiveContainer width="100%" height={220}>
+            <ScatterChart margin={{ left: 2, right: 20, top: 8, bottom: 0 }}>
               <CartesianGrid stroke="rgba(112,151,204,.10)" />
-              <XAxis type="number" dataKey="timeIndex" name="Signal" tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
-              <YAxis type="number" dataKey="z_score" name="Z-score" tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} width={32} />
+              <XAxis type="number" dataKey="volume" name="Volume" tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis type="number" dataKey="velocity" name="Velocity" tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} width={34} />
               <ZAxis type="number" dataKey="size" range={[55, 190]} />
               <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltip />} />
               <Scatter data={scatterData}>
@@ -458,6 +502,23 @@ export default function Dashboard() {
               </Scatter>
             </ScatterChart>
           </ResponsiveContainer>
+        </Panel>
+        <Panel title="Signal feed (live)" className="signal-feed-panel">
+          <div className="signal-feed-list">
+            {data.stories.slice(0, 5).map((story, index) => (
+              <a href={story.permalink || story.url} target="_blank" rel="noreferrer" key={story.story_id}>
+                <time>{formatTime(story.collected_at)}</time>
+                <span className={story.source_feed === "topstories" ? "feed-kind hot" : "feed-kind"}>{story.source_feed === "topstories" ? "Top" : "New"}</span>
+                <b>{story.title}</b>
+                <i className="micro-trend" aria-hidden="true">
+                  {[32, 45, 39, 64, 48, 75, 57].map((height, point) => (
+                    <span key={point} style={{ height: `${Math.max(14, height - index * 4)}%` }} />
+                  ))}
+                </i>
+                <strong>↑ {formatNumber(Number(story.score || 0) + Number(story.num_comments || 0))}</strong>
+              </a>
+            ))}
+          </div>
         </Panel>
       </section>
 
@@ -610,13 +671,22 @@ export default function Dashboard() {
               <option value="newstories">New stories</option>
               <option value="beststories">Best stories</option>
             </select>
-            <span>{filteredStories.length} results</span>
+            <span>Showing {Math.min(storyLimit, filteredStories.length)} of {filteredStories.length}</span>
+            {filteredStories.length > 18 && (
+              <button
+                className="density-toggle"
+                type="button"
+                onClick={() => setStoryLimit((limit) => limit > 18 ? 18 : Math.min(40, filteredStories.length))}
+              >
+                {storyLimit > 18 ? "Compact view" : "Expand list"}
+              </button>
+            )}
           </div>
-          <div className="story-table-wrap">
+          <div className={storyLimit > 18 ? "story-table-wrap expanded" : "story-table-wrap"}>
             <table>
               <thead><tr><th>Feed</th><th>Story</th><th>Score</th><th>Comments</th><th>Observed</th><th>Link</th></tr></thead>
               <tbody>
-                {filteredStories.slice(0, 12).map((story) => (
+                {visibleStories.map((story) => (
                   <tr key={`${story.story_id}-${story.source_feed}`}>
                     <td><span className="feed-chip">{story.source_feed}</span></td>
                     <td>{story.title}</td>
