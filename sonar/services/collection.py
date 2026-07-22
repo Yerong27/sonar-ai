@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import fcntl
 import logging
-import threading
+from collections.abc import Callable
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -15,7 +13,7 @@ from sqlalchemy import text
 from sonar.ai.evidence_briefs import EvidenceBriefGenerator
 from sonar.ai.gemini import GeminiExplainer
 from sonar.config import settings
-from sonar.db import Database, db as default_db
+from sonar.db import CollectorLockUnavailable, Database, db as default_db, utc_now
 from sonar.ingestion.hackernews_client import HackerNewsIngestionClient
 from sonar.ingestion.news_client import NewsValidationClient
 from sonar.processing.anomaly import detect_anomalies
@@ -23,11 +21,12 @@ from sonar.processing.metrics import build_metric_rows
 
 logger = logging.getLogger(__name__)
 
-_thread_lock = threading.Lock()
-
-
 @dataclass(frozen=True)
 class CollectionCycleResult:
+    run_id: str
+    status: str
+    replayed: bool
+    attempt_count: int
     started_at: str
     collected_at: str
     stories_seen: int
@@ -41,6 +40,25 @@ class CollectionCycleResult:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    @classmethod
+    def from_pipeline_run(cls, row: dict[str, Any], *, replayed: bool) -> CollectionCycleResult:
+        return cls(
+            run_id=str(row["run_id"]),
+            status=str(row["status"]),
+            replayed=replayed,
+            attempt_count=int(row["attempt_count"]),
+            started_at=str(row["started_at"]),
+            collected_at=str(row["collected_at"]),
+            stories_seen=int(row["stories_seen"]),
+            stories_inserted=int(row["stories_inserted"]),
+            metrics_inserted=int(row["metrics_inserted"]),
+            anomalies_detected=int(row["anomalies_detected"]),
+            briefs_generated=int(row["briefs_generated"]),
+            monitoring_summary_checked=bool(row["monitoring_summary_checked"]),
+            monitor_gap_flag=bool(row["monitor_gap_flag"]),
+            gap_duration_minutes=row["gap_duration_minutes"],
+        )
 
 
 def _gemini_story_payload(story: dict[str, object]) -> dict[str, object]:
@@ -86,28 +104,61 @@ class CollectionCycleService:
         news: NewsValidationClient | None = None,
         gemini: GeminiExplainer | None = None,
         brief_generator: EvidenceBriefGenerator | None = None,
-        lock_path: Path | None = None,
     ) -> None:
         self.database = database or default_db
         self.hackernews = hackernews or HackerNewsIngestionClient()
         self.news = news or NewsValidationClient()
         self.gemini = gemini or GeminiExplainer()
         self.brief_generator = brief_generator or EvidenceBriefGenerator(database=self.database)
-        self.lock_path = lock_path or settings.data_dir / "collection.lock"
 
-    def run_once(self) -> CollectionCycleResult:
-        self.lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with _thread_lock:
-            with self.lock_path.open("w") as lock_file:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+    def run_once(self, run_id: str) -> CollectionCycleResult:
+        existing = self.database.get_pipeline_run(run_id)
+        if existing and existing["status"] == "succeeded":
+            return CollectionCycleResult.from_pipeline_run(existing, replayed=True)
+
+        try:
+            with self.database.collector_lock():
+                run = self.database.start_pipeline_run(run_id, utc_now())
+                if run["status"] == "succeeded":
+                    return CollectionCycleResult.from_pipeline_run(run, replayed=True)
+
+                stage = "starting"
+
+                def enter_stage(next_stage: str) -> None:
+                    nonlocal stage
+                    stage = next_stage
+                    self.database.update_pipeline_stage(run_id, next_stage)
+
                 try:
-                    return self._run_unlocked()
-                finally:
-                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                    result = self._run_unlocked(
+                        run_id=run_id,
+                        attempt_count=int(run["attempt_count"]),
+                        batch_started_at=datetime.fromisoformat(str(run["started_at"])),
+                        batch_collected_at=str(run["collected_at"]),
+                        enter_stage=enter_stage,
+                    )
+                    self.database.complete_pipeline_run(run_id, result.to_dict(), utc_now())
+                    return result
+                except Exception as exc:
+                    self.database.fail_pipeline_run(
+                        run_id,
+                        stage=stage,
+                        error_message=f"{type(exc).__name__}: {exc}",
+                    )
+                    raise
+        except CollectorLockUnavailable as exc:
+            self.database.record_pipeline_lock_failure(run_id, str(exc))
+            raise
 
-    def _run_unlocked(self) -> CollectionCycleResult:
-        batch_started_at = datetime.now(timezone.utc)
-        batch_collected_at = batch_started_at.isoformat()
+    def _run_unlocked(
+        self,
+        *,
+        run_id: str,
+        attempt_count: int,
+        batch_started_at: datetime,
+        batch_collected_at: str,
+        enter_stage: Callable[[str], None],
+    ) -> CollectionCycleResult:
         last_collection_time = self.database.get_last_collection_time()
         monitor_gap_flag = False
         gap_duration_minutes: int | None = None
@@ -118,20 +169,25 @@ class CollectionCycleService:
                 monitor_gap_flag = True
                 gap_duration_minutes = int(round(gap.total_seconds() / 60))
 
+        enter_stage("collecting_stories")
         stories = self.hackernews.fetch_latest_stories(collected_at=batch_collected_at)
         for story in stories:
             story["monitor_gap_flag"] = 1 if monitor_gap_flag else 0
             story["gap_duration_minutes"] = gap_duration_minutes
         inserted = self.database.insert_story_snapshots(stories)
-        self.database.set_last_collection_time(batch_collected_at)
         logger.info("Collected %s stories, inserted %s new rows", len(stories), inserted)
-        self.database.upsert_status("gemini_status", "enabled" if self.gemini.enabled else "disabled")
+        self.database.upsert_status(
+            "gemini_status",
+            "enabled" if self.gemini.enabled else "disabled",
+        )
 
-        window_end = datetime.now(timezone.utc)
-        metrics_history = self._load_metric_history()
+        enter_stage("building_metrics")
+        window_end = datetime.fromisoformat(batch_collected_at)
+        metrics_history = self._load_metric_history(batch_collected_at)
         snapshot_window = self._load_new_story_window(window_end)
         metric_rows = build_metric_rows(snapshot_window, metrics_history, window_end)
         for row in metric_rows:
+            row["collected_at"] = batch_collected_at
             self.database.insert_aggregated_metric(row)
 
         if metric_rows:
@@ -144,18 +200,35 @@ class CollectionCycleService:
         else:
             combined_history = metrics_history
 
+        enter_stage("detecting_anomalies")
         anomalies = detect_anomalies(combined_history, metric_rows)
         persisted_anomalies: list[dict] = []
         for anomaly in anomalies:
+            anomaly["detected_at"] = batch_collected_at
             anomaly_id = self.database.insert_anomaly(anomaly)
             persisted = anomaly.copy()
             persisted["id"] = anomaly_id
+            persisted["explanation_status"] = self.database.get_anomaly_explanation_status(
+                anomaly_id
+            )
             persisted_anomalies.append(persisted)
 
+        enter_stage("generating_briefs")
         briefs_generated = self._generate_briefs(persisted_anomalies, stories)
-        monitoring_summary_checked = self._run_monitoring_summary(stories)
+        enter_stage("monitoring_summary")
+        monitoring_summary_checked = self._run_monitoring_summary(
+            stories,
+            created_at=batch_collected_at,
+        )
+
+        enter_stage("finalizing")
+        self.database.set_last_collection_time(batch_collected_at)
 
         return CollectionCycleResult(
+            run_id=run_id,
+            status="succeeded",
+            replayed=False,
+            attempt_count=attempt_count,
             started_at=batch_started_at.isoformat(),
             collected_at=batch_collected_at,
             stories_seen=len(stories),
@@ -173,6 +246,8 @@ class CollectionCycleService:
         explanation_target_ids = _select_explanation_targets(persisted_anomalies)
         for anomaly in persisted_anomalies:
             anomaly_id = int(anomaly["id"])
+            if anomaly.get("explanation_status") in {"complete", "suppressed"}:
+                continue
             if anomaly_id not in explanation_target_ids:
                 self.database.update_anomaly_explanation_status(anomaly_id, "suppressed")
                 continue
@@ -208,7 +283,7 @@ class CollectionCycleService:
                     self.database.upsert_status("gemini_status", "provider_disabled")
         return briefs_generated
 
-    def _load_metric_history(self) -> pd.DataFrame:
+    def _load_metric_history(self, before_collected_at: str) -> pd.DataFrame:
         with self.database.connect() as conn:
             return pd.read_sql_query(
                 text(
@@ -217,11 +292,15 @@ class CollectionCycleService:
                            engagement_score, growth_rate, collected_at
                     FROM aggregated_metrics
                     WHERE metric_version = :metric_version
+                      AND collected_at < :before_collected_at
                     ORDER BY collected_at ASC
                     """
                 ),
                 conn,
-                params={"metric_version": settings.metric_semantics_version},
+                params={
+                    "metric_version": settings.metric_semantics_version,
+                    "before_collected_at": before_collected_at,
+                },
             )
 
     def _load_new_story_window(self, window_end: datetime) -> pd.DataFrame:
@@ -250,7 +329,7 @@ class CollectionCycleService:
                 params={"window_start": window_start.isoformat()},
             )
 
-    def _run_monitoring_summary(self, stories: list[dict]) -> bool:
+    def _run_monitoring_summary(self, stories: list[dict], *, created_at: str) -> bool:
         if not self.gemini.enabled or not stories:
             return False
 
@@ -272,7 +351,12 @@ class CollectionCycleService:
         ]
         summary = self.gemini.summarize_monitoring_snapshot(sample)
         if summary:
-            self.database.insert_monitoring_summary("all_feeds", summary, len(sample))
+            self.database.insert_monitoring_summary(
+                "all_feeds",
+                summary,
+                len(sample),
+                created_at=created_at,
+            )
             self.database.upsert_status("gemini_status", "ok")
             logger.info("Stored Gemini monitoring summary for %s stories", len(sample))
         elif self.gemini.last_error:
@@ -280,6 +364,9 @@ class CollectionCycleService:
         return True
 
 
-def run_collection_cycle(service: CollectionCycleService | None = None) -> CollectionCycleResult:
-    """Shared task entrypoint for API-triggered and scheduled collection runs."""
-    return (service or CollectionCycleService()).run_once()
+def run_collection_cycle(
+    run_id: str,
+    service: CollectionCycleService | None = None,
+) -> CollectionCycleResult:
+    """Run one retry-safe collection cycle under a stable logical run ID."""
+    return (service or CollectionCycleService()).run_once(run_id)

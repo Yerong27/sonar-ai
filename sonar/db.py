@@ -11,6 +11,13 @@ from sqlalchemy.engine import Connection, Engine
 from sonar.config import settings
 
 
+COLLECTOR_ADVISORY_LOCK_ID = 7_285_358_723_025_986_130
+
+
+class CollectorLockUnavailable(RuntimeError):
+    """Raised when another collector cycle already owns the database lock."""
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -46,6 +53,197 @@ class Database:
         with self.engine.begin() as connection:
             yield connection
 
+    @contextmanager
+    def collector_lock(self) -> Iterator[None]:
+        """Hold one PostgreSQL session advisory lock for a complete collector cycle."""
+
+        with self.engine.connect() as connection:
+            acquired = bool(
+                connection.execute(
+                    text("SELECT pg_try_advisory_lock(:lock_id)"),
+                    {"lock_id": COLLECTOR_ADVISORY_LOCK_ID},
+                ).scalar_one()
+            )
+            if not acquired:
+                raise CollectorLockUnavailable(
+                    "another collector run already holds the database lock"
+                )
+            try:
+                yield
+            finally:
+                connection.execute(
+                    text("SELECT pg_advisory_unlock(:lock_id)"),
+                    {"lock_id": COLLECTOR_ADVISORY_LOCK_ID},
+                )
+
+    def start_pipeline_run(self, run_id: str, started_at: str) -> dict[str, Any]:
+        """Create a run or resume a non-successful run while preserving its logical time."""
+
+        with self.connect() as connection:
+            inserted = connection.execute(
+                text(
+                    """
+                    INSERT INTO pipeline_runs (
+                        run_id, status, started_at, collected_at, current_stage
+                    ) VALUES (
+                        :run_id, 'running', :started_at, :started_at, 'starting'
+                    )
+                    ON CONFLICT (run_id) DO NOTHING
+                    RETURNING run_id
+                    """
+                ),
+                {"run_id": run_id, "started_at": started_at},
+            ).scalar_one_or_none()
+
+            if inserted is None:
+                existing = (
+                    connection.execute(
+                        text("SELECT * FROM pipeline_runs WHERE run_id = :run_id FOR UPDATE"),
+                        {"run_id": run_id},
+                    )
+                    .mappings()
+                    .one()
+                )
+                if existing["status"] != "succeeded":
+                    connection.execute(
+                        text(
+                            """
+                            UPDATE pipeline_runs
+                            SET status = 'running',
+                                finished_at = NULL,
+                                attempt_count = attempt_count + 1,
+                                current_stage = 'starting',
+                                error_stage = NULL,
+                                error_message = NULL
+                            WHERE run_id = :run_id
+                            """
+                        ),
+                        {"run_id": run_id},
+                    )
+
+            return dict(
+                connection.execute(
+                    text("SELECT * FROM pipeline_runs WHERE run_id = :run_id"),
+                    {"run_id": run_id},
+                )
+                .mappings()
+                .one()
+            )
+
+    def get_pipeline_run(self, run_id: str) -> dict[str, Any] | None:
+        with self.connect() as connection:
+            row = (
+                connection.execute(
+                    text("SELECT * FROM pipeline_runs WHERE run_id = :run_id"),
+                    {"run_id": run_id},
+                )
+                .mappings()
+                .first()
+            )
+            return dict(row) if row else None
+
+    def update_pipeline_stage(self, run_id: str, stage: str) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    UPDATE pipeline_runs
+                    SET current_stage = :stage
+                    WHERE run_id = :run_id AND status = 'running'
+                    """
+                ),
+                {"run_id": run_id, "stage": stage},
+            )
+
+    def complete_pipeline_run(self, run_id: str, result: dict[str, Any], finished_at: str) -> None:
+        values = {
+            "run_id": run_id,
+            "finished_at": finished_at,
+            "stories_seen": int(result["stories_seen"]),
+            "stories_inserted": int(result["stories_inserted"]),
+            "metrics_inserted": int(result["metrics_inserted"]),
+            "anomalies_detected": int(result["anomalies_detected"]),
+            "briefs_generated": int(result["briefs_generated"]),
+            "monitoring_summary_checked": bool(result["monitoring_summary_checked"]),
+            "monitor_gap_flag": bool(result["monitor_gap_flag"]),
+            "gap_duration_minutes": result["gap_duration_minutes"],
+        }
+        with self.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    UPDATE pipeline_runs
+                    SET status = 'succeeded',
+                        finished_at = :finished_at,
+                        current_stage = 'complete',
+                        error_stage = NULL,
+                        error_message = NULL,
+                        stories_seen = :stories_seen,
+                        stories_inserted = :stories_inserted,
+                        metrics_inserted = :metrics_inserted,
+                        anomalies_detected = :anomalies_detected,
+                        briefs_generated = :briefs_generated,
+                        monitoring_summary_checked = :monitoring_summary_checked,
+                        monitor_gap_flag = :monitor_gap_flag,
+                        gap_duration_minutes = :gap_duration_minutes
+                    WHERE run_id = :run_id
+                    """
+                ),
+                values,
+            )
+
+    def fail_pipeline_run(
+        self,
+        run_id: str,
+        *,
+        stage: str,
+        error_message: str,
+        finished_at: str | None = None,
+    ) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    UPDATE pipeline_runs
+                    SET status = 'failed',
+                        finished_at = :finished_at,
+                        current_stage = 'failed',
+                        error_stage = :stage,
+                        error_message = :error_message
+                    WHERE run_id = :run_id AND status <> 'succeeded'
+                    """
+                ),
+                {
+                    "run_id": run_id,
+                    "finished_at": finished_at or utc_now(),
+                    "stage": stage,
+                    "error_message": error_message[:2000],
+                },
+            )
+
+    def record_pipeline_lock_failure(self, run_id: str, error_message: str) -> None:
+        timestamp = utc_now()
+        with self.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO pipeline_runs (
+                        run_id, status, started_at, collected_at, finished_at,
+                        current_stage, error_stage, error_message
+                    ) VALUES (
+                        :run_id, 'failed', :timestamp, :timestamp, :timestamp,
+                        'failed', 'lock', :error_message
+                    )
+                    ON CONFLICT (run_id) DO NOTHING
+                    """
+                ),
+                {
+                    "run_id": run_id,
+                    "timestamp": timestamp,
+                    "error_message": error_message[:2000],
+                },
+            )
+
     def insert_story_snapshots(self, stories: list[dict[str, Any]]) -> int:
         if not stories:
             return 0
@@ -69,9 +267,9 @@ class Database:
             )
             return int(result.rowcount or 0)
 
-    def insert_aggregated_metric(self, metric_row: dict[str, Any]) -> None:
+    def insert_aggregated_metric(self, metric_row: dict[str, Any]) -> bool:
         with self.connect() as connection:
-            connection.execute(
+            result = connection.execute(
                 text(
                     """
                     INSERT INTO aggregated_metrics (
@@ -81,10 +279,12 @@ class Database:
                         :source_feed, :window_start, :window_end, :story_volume, :avg_score,
                         :avg_comments, :engagement_score, :growth_rate, :metric_version, :collected_at
                     )
+                    ON CONFLICT (source_feed, window_start, window_end, metric_version) DO NOTHING
                     """
                 ),
                 metric_row,
             )
+            return bool(result.rowcount)
 
     def insert_anomaly(self, anomaly_row: dict[str, Any]) -> int:
         with self.connect() as connection:
@@ -98,12 +298,36 @@ class Database:
                         :source_feed, :metric_name, :metric_value, :baseline_value, :z_score,
                         :triggered_by, :detected_at, :news_aligned, :explanation_status, :metric_version
                     )
+                    ON CONFLICT (source_feed, metric_name, detected_at, metric_version) DO NOTHING
                     RETURNING id
                     """
                 ),
                 anomaly_row,
             )
-            return int(result.scalar_one())
+            anomaly_id = result.scalar_one_or_none()
+            if anomaly_id is not None:
+                return int(anomaly_id)
+            existing_id = connection.execute(
+                text(
+                    """
+                    SELECT id
+                    FROM anomalies
+                    WHERE source_feed = :source_feed
+                      AND metric_name = :metric_name
+                      AND detected_at = :detected_at
+                      AND metric_version = :metric_version
+                    """
+                ),
+                anomaly_row,
+            ).scalar_one()
+            return int(existing_id)
+
+    def get_anomaly_explanation_status(self, anomaly_id: int) -> str | None:
+        with self.connect() as connection:
+            return connection.execute(
+                text("SELECT explanation_status FROM anomalies WHERE id = :anomaly_id"),
+                {"anomaly_id": anomaly_id},
+            ).scalar_one_or_none()
 
     def insert_news_match(self, news_row: dict[str, Any]) -> None:
         payload = news_row.copy()
@@ -117,6 +341,10 @@ class Database:
                     ) VALUES (
                         :anomaly_id, :article_count, :top_headlines, :checked_at
                     )
+                    ON CONFLICT (anomaly_id) DO UPDATE SET
+                        article_count = EXCLUDED.article_count,
+                        top_headlines = EXCLUDED.top_headlines,
+                        checked_at = EXCLUDED.checked_at
                     """
                 ),
                 payload,
@@ -185,9 +413,11 @@ class Database:
         source_scope: str,
         response_json: dict[str, Any],
         story_count: int,
-    ) -> None:
+        *,
+        created_at: str | None = None,
+    ) -> bool:
         with self.connect() as connection:
-            connection.execute(
+            result = connection.execute(
                 text(
                     """
                     INSERT INTO monitoring_summaries (
@@ -195,15 +425,17 @@ class Database:
                     ) VALUES (
                         :source_scope, :response_json, :story_count, :created_at
                     )
+                    ON CONFLICT (source_scope, created_at) DO NOTHING
                     """
                 ),
                 {
                     "source_scope": source_scope,
                     "response_json": json.dumps(response_json),
                     "story_count": story_count,
-                    "created_at": utc_now(),
+                    "created_at": created_at or utc_now(),
                 },
             )
+            return bool(result.rowcount)
 
     def upsert_document(
         self,
@@ -303,6 +535,9 @@ class Database:
                     ) VALUES (
                         :ai_run_id, :document_id, :reason_used, :rank, :created_at
                     )
+                    ON CONFLICT (ai_run_id, document_id) DO UPDATE SET
+                        reason_used = EXCLUDED.reason_used,
+                        rank = EXCLUDED.rank
                     """
                 ),
                 {
@@ -384,6 +619,7 @@ class Database:
                 text(
                     """
                     TRUNCATE TABLE
+                        pipeline_runs,
                         brief_evidence,
                         explanations,
                         ai_runs,

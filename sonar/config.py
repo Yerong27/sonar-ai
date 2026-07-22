@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -48,7 +47,6 @@ class Settings:
             "http://localhost:5174,http://127.0.0.1:5174",
         )
     )
-    data_dir: Path = Path(__file__).resolve().parent / "data"
     database_url: str = field(default_factory=lambda: required_env("DATABASE_URL"))
     max_story_ids: int = int(os.getenv("SONAR_MAX_STORY_IDS", "60"))
     metric_semantics_version: int = 2
@@ -58,4 +56,3 @@ class Settings:
 
 
 settings = Settings()
-settings.data_dir.mkdir(parents=True, exist_ok=True)

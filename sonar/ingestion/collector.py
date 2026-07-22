@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from uuid import uuid4
 
 from sonar.config import settings
 from sonar.db import db
@@ -28,7 +29,7 @@ class SonarCollector:
             self._thread.join(timeout=2)
 
     def run_once(self) -> CollectionCycleResult:
-        return self.collection_service.run_once()
+        return self.collection_service.run_once(str(uuid4()))
 
     def reset_session_data(self) -> None:
         db.reset_monitoring_session()

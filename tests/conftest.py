@@ -30,6 +30,7 @@ if test_url.database != "sonar_test":
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 TABLES = (
+    "pipeline_runs",
     "brief_evidence",
     "explanations",
     "ai_runs",
