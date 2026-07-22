@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from sqlalchemy import text
 
 from sonar.ai.evidence_briefs import EvidenceBriefGenerator
 from sonar.ai.gemini import GeminiExplainer
@@ -210,39 +211,43 @@ class CollectionCycleService:
     def _load_metric_history(self) -> pd.DataFrame:
         with self.database.connect() as conn:
             return pd.read_sql_query(
-                """
-                SELECT source_feed, story_volume, avg_score, avg_comments,
-                       engagement_score, growth_rate, collected_at
-                FROM aggregated_metrics
-                WHERE metric_version = ?
-                ORDER BY collected_at ASC
-                """,
+                text(
+                    """
+                    SELECT source_feed, story_volume, avg_score, avg_comments,
+                           engagement_score, growth_rate, collected_at
+                    FROM aggregated_metrics
+                    WHERE metric_version = :metric_version
+                    ORDER BY collected_at ASC
+                    """
+                ),
                 conn,
-                params=(settings.metric_semantics_version,),
+                params={"metric_version": settings.metric_semantics_version},
             )
 
     def _load_new_story_window(self, window_end: datetime) -> pd.DataFrame:
         window_start = window_end - timedelta(minutes=30)
         with self.database.connect() as conn:
             return pd.read_sql_query(
-                """
-                WITH first_seen AS (
-                    SELECT source_feed, story_id, MIN(collected_at) AS first_seen_at
-                    FROM hn_story_snapshots
-                    GROUP BY source_feed, story_id
-                    HAVING MIN(collected_at) >= ?
-                )
-                SELECT s.source_feed, s.story_id, s.score, s.num_comments,
-                       s.collected_at, first_seen.first_seen_at
-                FROM hn_story_snapshots s
-                JOIN first_seen
-                  ON first_seen.source_feed = s.source_feed
-                 AND first_seen.story_id = s.story_id
-                WHERE s.collected_at >= ?
-                ORDER BY s.collected_at ASC
-                """,
+                text(
+                    """
+                    WITH first_seen AS (
+                        SELECT source_feed, story_id, MIN(collected_at) AS first_seen_at
+                        FROM hn_story_snapshots
+                        GROUP BY source_feed, story_id
+                        HAVING MIN(collected_at) >= :window_start
+                    )
+                    SELECT s.source_feed, s.story_id, s.score, s.num_comments,
+                           s.collected_at, first_seen.first_seen_at
+                    FROM hn_story_snapshots s
+                    JOIN first_seen
+                      ON first_seen.source_feed = s.source_feed
+                     AND first_seen.story_id = s.story_id
+                    WHERE s.collected_at >= :window_start
+                    ORDER BY s.collected_at ASC
+                    """
+                ),
                 conn,
-                params=(window_start.isoformat(), window_start.isoformat()),
+                params={"window_start": window_start.isoformat()},
             )
 
     def _run_monitoring_summary(self, stories: list[dict]) -> bool:

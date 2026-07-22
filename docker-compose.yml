@@ -1,20 +1,42 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: sonar
+    ports:
+      - "5432:5432"
+    volumes:
+      - sonar-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sonar -d sonar"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   api:
     build:
       context: .
       dockerfile: Dockerfile.api
     ports:
       - "8060:8060"
-    volumes:
-      - sonar-data:/app/sonar/data
+    environment:
+      DATABASE_URL: postgresql+psycopg://sonar:${POSTGRES_PASSWORD:-change-me}@postgres:5432/sonar
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   worker:
     build:
       context: .
       dockerfile: Dockerfile.api
     command: python -m sonar.worker
-    volumes:
-      - sonar-data:/app/sonar/data
+    environment:
+      DATABASE_URL: postgresql+psycopg://sonar:${POSTGRES_PASSWORD:-change-me}@postgres:5432/sonar
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   dash:
     build:
@@ -36,3 +58,4 @@ services:
 
 volumes:
   sonar-data:
+  sonar-postgres:

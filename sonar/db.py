@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Iterator
+
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Connection, Engine
 
 from sonar.config import settings
 
@@ -15,306 +16,168 @@ def utc_now() -> str:
 
 
 class Database:
-    def __init__(self, db_path: Path | None = None) -> None:
-        self.db_path = db_path or settings.database_path
-        self._initialize()
+    """PostgreSQL-backed database operations used by Sonar.
+
+    Constructing this wrapper creates a lazy SQLAlchemy engine only. Schema DDL
+    is owned exclusively by Alembic and is never executed during import/startup.
+    """
+
+    def __init__(
+        self,
+        database_url: str | None = None,
+        *,
+        engine: Engine | None = None,
+    ) -> None:
+        if database_url is not None and engine is not None:
+            raise ValueError("Pass either database_url or engine, not both")
+        self.engine = engine or create_engine(
+            database_url or settings.database_url,
+            pool_pre_ping=True,
+        )
 
     @contextmanager
-    def connect(self) -> Iterator[sqlite3.Connection]:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        try:
-            yield conn
-            conn.commit()
-        finally:
-            conn.close()
+    def connect(self) -> Iterator[Connection]:
+        """Yield one transactional connection.
 
-    def _initialize(self) -> None:
-        with self.connect() as conn:
-            conn.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS hn_story_snapshots (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    story_id TEXT NOT NULL,
-                    source_feed TEXT NOT NULL,
-                    title TEXT NOT NULL,
-                    author TEXT,
-                    score INTEGER NOT NULL,
-                    num_comments INTEGER NOT NULL,
-                    created_at TEXT NOT NULL,
-                    permalink TEXT NOT NULL,
-                    url TEXT,
-                    collected_at TEXT NOT NULL,
-                    monitor_gap_flag INTEGER NOT NULL DEFAULT 0,
-                    gap_duration_minutes INTEGER
-                );
+        A successful context commits once; an exception rolls the transaction
+        back. The connection is returned to the engine pool in both cases.
+        """
 
-                CREATE TABLE IF NOT EXISTS aggregated_metrics (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    source_feed TEXT NOT NULL,
-                    window_start TEXT NOT NULL,
-                    window_end TEXT NOT NULL,
-                    story_volume INTEGER NOT NULL,
-                    avg_score REAL NOT NULL,
-                    avg_comments REAL NOT NULL,
-                    engagement_score REAL NOT NULL,
-                    growth_rate REAL NOT NULL,
-                    metric_version INTEGER NOT NULL DEFAULT 1,
-                    collected_at TEXT NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS anomalies (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    source_feed TEXT NOT NULL,
-                    metric_name TEXT NOT NULL,
-                    metric_value REAL NOT NULL,
-                    baseline_value REAL NOT NULL,
-                    z_score REAL NOT NULL,
-                    triggered_by TEXT NOT NULL,
-                    detected_at TEXT NOT NULL,
-                    news_aligned INTEGER DEFAULT 0,
-                    explanation_status TEXT DEFAULT 'pending',
-                    metric_version INTEGER NOT NULL DEFAULT 1
-                );
-
-                CREATE TABLE IF NOT EXISTS news_matches (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    anomaly_id INTEGER NOT NULL,
-                    article_count INTEGER NOT NULL,
-                    top_headlines TEXT NOT NULL,
-                    checked_at TEXT NOT NULL,
-                    FOREIGN KEY (anomaly_id) REFERENCES anomalies(id)
-                );
-
-                CREATE TABLE IF NOT EXISTS explanations (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    anomaly_id INTEGER NOT NULL UNIQUE,
-                    response_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY (anomaly_id) REFERENCES anomalies(id)
-                );
-
-                CREATE TABLE IF NOT EXISTS monitoring_summaries (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    source_scope TEXT NOT NULL,
-                    response_json TEXT NOT NULL,
-                    story_count INTEGER NOT NULL,
-                    created_at TEXT NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS documents (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    source TEXT NOT NULL,
-                    source_id TEXT NOT NULL,
-                    title TEXT NOT NULL,
-                    url TEXT,
-                    content TEXT NOT NULL,
-                    metadata_json TEXT NOT NULL DEFAULT '{}',
-                    created_at TEXT NOT NULL,
-                    UNIQUE (source, source_id)
-                );
-
-                CREATE TABLE IF NOT EXISTS document_terms (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    document_id INTEGER NOT NULL,
-                    terms_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY (document_id) REFERENCES documents(id)
-                );
-
-                CREATE TABLE IF NOT EXISTS ai_runs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    anomaly_id INTEGER,
-                    provider TEXT NOT NULL,
-                    model TEXT NOT NULL,
-                    schema_name TEXT NOT NULL,
-                    prompt TEXT NOT NULL,
-                    raw_response TEXT,
-                    parsed_json TEXT,
-                    status TEXT NOT NULL,
-                    error TEXT,
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY (anomaly_id) REFERENCES anomalies(id)
-                );
-
-                CREATE TABLE IF NOT EXISTS brief_evidence (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    ai_run_id INTEGER NOT NULL,
-                    document_id INTEGER NOT NULL,
-                    reason_used TEXT NOT NULL,
-                    rank INTEGER NOT NULL,
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY (ai_run_id) REFERENCES ai_runs(id),
-                    FOREIGN KEY (document_id) REFERENCES documents(id)
-                );
-
-                CREATE TABLE IF NOT EXISTS system_status (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                """
-            )
-            # Change 2: persist monitoring gap metadata alongside each snapshot row.
-            self._ensure_column(
-                conn,
-                "hn_story_snapshots",
-                "monitor_gap_flag",
-                "INTEGER NOT NULL DEFAULT 0",
-            )
-            self._ensure_column(
-                conn,
-                "hn_story_snapshots",
-                "gap_duration_minutes",
-                "INTEGER",
-            )
-            self._ensure_column(
-                conn,
-                "aggregated_metrics",
-                "metric_version",
-                "INTEGER NOT NULL DEFAULT 1",
-            )
-            self._ensure_column(
-                conn,
-                "anomalies",
-                "metric_version",
-                "INTEGER NOT NULL DEFAULT 1",
-            )
-            conn.execute("DROP INDEX IF EXISTS idx_hn_story_snapshot_unique")
-            conn.execute(
-                """
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_hn_story_snapshot_unique
-                ON hn_story_snapshots (story_id, source_feed, collected_at)
-                """
-            )
-            conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_hn_story_snapshot_feed_time
-                ON hn_story_snapshots (source_feed, collected_at)
-                """
-            )
-            conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_documents_source_id
-                ON documents (source, source_id)
-                """
-            )
-            conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_ai_runs_anomaly_created
-                ON ai_runs (anomaly_id, created_at)
-                """
-            )
-
-    @staticmethod
-    def _ensure_column(
-        conn: sqlite3.Connection,
-        table_name: str,
-        column_name: str,
-        column_definition: str,
-    ) -> None:
-        columns = {
-            str(row[1])
-            for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
-        }
-        if column_name not in columns:
-            conn.execute(
-                f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}"
-            )
+        with self.engine.begin() as connection:
+            yield connection
 
     def insert_story_snapshots(self, stories: list[dict[str, Any]]) -> int:
         if not stories:
             return 0
-        with self.connect() as conn:
-            cursor = conn.executemany(
-                """
-                INSERT OR IGNORE INTO hn_story_snapshots (
-                    story_id, source_feed, title, author, score, num_comments,
-                    created_at, permalink, url, collected_at,
-                    monitor_gap_flag, gap_duration_minutes
-                ) VALUES (
-                    :story_id, :source_feed, :title, :author, :score, :num_comments,
-                    :created_at, :permalink, :url, :collected_at,
-                    :monitor_gap_flag, :gap_duration_minutes
-                )
-                """,
+        with self.connect() as connection:
+            result = connection.execute(
+                text(
+                    """
+                    INSERT INTO hn_story_snapshots (
+                        story_id, source_feed, title, author, score, num_comments,
+                        created_at, permalink, url, collected_at,
+                        monitor_gap_flag, gap_duration_minutes
+                    ) VALUES (
+                        :story_id, :source_feed, :title, :author, :score, :num_comments,
+                        :created_at, :permalink, :url, :collected_at,
+                        :monitor_gap_flag, :gap_duration_minutes
+                    )
+                    ON CONFLICT (story_id, source_feed, collected_at) DO NOTHING
+                    """
+                ),
                 stories,
             )
-            return cursor.rowcount
+            return int(result.rowcount or 0)
 
     def insert_aggregated_metric(self, metric_row: dict[str, Any]) -> None:
-        with self.connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO aggregated_metrics (
-                    source_feed, window_start, window_end, story_volume, avg_score,
-                    avg_comments, engagement_score, growth_rate, metric_version, collected_at
-                ) VALUES (
-                    :source_feed, :window_start, :window_end, :story_volume, :avg_score,
-                    :avg_comments, :engagement_score, :growth_rate, :metric_version, :collected_at
-                )
-                """,
+        with self.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO aggregated_metrics (
+                        source_feed, window_start, window_end, story_volume, avg_score,
+                        avg_comments, engagement_score, growth_rate, metric_version, collected_at
+                    ) VALUES (
+                        :source_feed, :window_start, :window_end, :story_volume, :avg_score,
+                        :avg_comments, :engagement_score, :growth_rate, :metric_version, :collected_at
+                    )
+                    """
+                ),
                 metric_row,
             )
 
     def insert_anomaly(self, anomaly_row: dict[str, Any]) -> int:
-        with self.connect() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO anomalies (
-                    source_feed, metric_name, metric_value, baseline_value, z_score,
-                    triggered_by, detected_at, news_aligned, explanation_status, metric_version
-                ) VALUES (
-                    :source_feed, :metric_name, :metric_value, :baseline_value, :z_score,
-                    :triggered_by, :detected_at, :news_aligned, :explanation_status, :metric_version
-                )
-                """,
+        with self.connect() as connection:
+            result = connection.execute(
+                text(
+                    """
+                    INSERT INTO anomalies (
+                        source_feed, metric_name, metric_value, baseline_value, z_score,
+                        triggered_by, detected_at, news_aligned, explanation_status, metric_version
+                    ) VALUES (
+                        :source_feed, :metric_name, :metric_value, :baseline_value, :z_score,
+                        :triggered_by, :detected_at, :news_aligned, :explanation_status, :metric_version
+                    )
+                    RETURNING id
+                    """
+                ),
                 anomaly_row,
             )
-            return int(cursor.lastrowid)
+            return int(result.scalar_one())
 
     def insert_news_match(self, news_row: dict[str, Any]) -> None:
         payload = news_row.copy()
         payload["top_headlines"] = json.dumps(payload["top_headlines"])
-        with self.connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO news_matches (
-                    anomaly_id, article_count, top_headlines, checked_at
-                ) VALUES (
-                    :anomaly_id, :article_count, :top_headlines, :checked_at
-                )
-                """,
+        with self.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO news_matches (
+                        anomaly_id, article_count, top_headlines, checked_at
+                    ) VALUES (
+                        :anomaly_id, :article_count, :top_headlines, :checked_at
+                    )
+                    """
+                ),
                 payload,
             )
 
     def insert_explanation(self, anomaly_id: int, response_json: dict[str, Any]) -> None:
-        with self.connect() as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO explanations (
-                    anomaly_id, response_json, created_at
-                ) VALUES (?, ?, ?)
-                """,
-                (anomaly_id, json.dumps(response_json), utc_now()),
+        with self.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO explanations (
+                        anomaly_id, response_json, created_at
+                    ) VALUES (
+                        :anomaly_id, :response_json, :created_at
+                    )
+                    ON CONFLICT (anomaly_id) DO UPDATE SET
+                        response_json = EXCLUDED.response_json,
+                        created_at = EXCLUDED.created_at
+                    """
+                ),
+                {
+                    "anomaly_id": anomaly_id,
+                    "response_json": json.dumps(response_json),
+                    "created_at": utc_now(),
+                },
             )
-            conn.execute(
-                "UPDATE anomalies SET explanation_status = 'complete' WHERE id = ?",
-                (anomaly_id,),
+            connection.execute(
+                text(
+                    """
+                    UPDATE anomalies
+                    SET explanation_status = 'complete'
+                    WHERE id = :anomaly_id
+                    """
+                ),
+                {"anomaly_id": anomaly_id},
             )
 
     def update_anomaly_explanation_status(self, anomaly_id: int, status: str) -> None:
-        with self.connect() as conn:
-            conn.execute(
-                "UPDATE anomalies SET explanation_status = ? WHERE id = ?",
-                (status, anomaly_id),
+        with self.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    UPDATE anomalies
+                    SET explanation_status = :status
+                    WHERE id = :anomaly_id
+                    """
+                ),
+                {"status": status, "anomaly_id": anomaly_id},
             )
 
     def update_anomaly_news_alignment(self, anomaly_id: int, news_aligned: bool) -> None:
-        with self.connect() as conn:
-            conn.execute(
-                "UPDATE anomalies SET news_aligned = ? WHERE id = ?",
-                (1 if news_aligned else 0, anomaly_id),
+        with self.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    UPDATE anomalies
+                    SET news_aligned = :news_aligned
+                    WHERE id = :anomaly_id
+                    """
+                ),
+                {"news_aligned": int(news_aligned), "anomaly_id": anomaly_id},
             )
 
     def insert_monitoring_summary(
@@ -323,14 +186,23 @@ class Database:
         response_json: dict[str, Any],
         story_count: int,
     ) -> None:
-        with self.connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO monitoring_summaries (
-                    source_scope, response_json, story_count, created_at
-                ) VALUES (?, ?, ?, ?)
-                """,
-                (source_scope, json.dumps(response_json), story_count, utc_now()),
+        with self.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO monitoring_summaries (
+                        source_scope, response_json, story_count, created_at
+                    ) VALUES (
+                        :source_scope, :response_json, :story_count, :created_at
+                    )
+                    """
+                ),
+                {
+                    "source_scope": source_scope,
+                    "response_json": json.dumps(response_json),
+                    "story_count": story_count,
+                    "created_at": utc_now(),
+                },
             )
 
     def upsert_document(
@@ -343,37 +215,34 @@ class Database:
         content: str,
         metadata: dict[str, Any] | None = None,
     ) -> int:
-        with self.connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO documents (
-                    source, source_id, title, url, content, metadata_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(source, source_id) DO UPDATE SET
-                    title = excluded.title,
-                    url = excluded.url,
-                    content = excluded.content,
-                    metadata_json = excluded.metadata_json
-                """,
-                (
-                    source,
-                    source_id,
-                    title,
-                    url,
-                    content,
-                    json.dumps(metadata or {}),
-                    utc_now(),
+        with self.connect() as connection:
+            result = connection.execute(
+                text(
+                    """
+                    INSERT INTO documents (
+                        source, source_id, title, url, content, metadata_json, created_at
+                    ) VALUES (
+                        :source, :source_id, :title, :url, :content, :metadata_json, :created_at
+                    )
+                    ON CONFLICT (source, source_id) DO UPDATE SET
+                        title = EXCLUDED.title,
+                        url = EXCLUDED.url,
+                        content = EXCLUDED.content,
+                        metadata_json = EXCLUDED.metadata_json
+                    RETURNING id
+                    """
                 ),
+                {
+                    "source": source,
+                    "source_id": source_id,
+                    "title": title,
+                    "url": url,
+                    "content": content,
+                    "metadata_json": json.dumps(metadata or {}),
+                    "created_at": utc_now(),
+                },
             )
-            row = conn.execute(
-                """
-                SELECT id
-                FROM documents
-                WHERE source = ? AND source_id = ?
-                """,
-                (source, source_id),
-            ).fetchone()
-            return int(row["id"])
+            return int(result.scalar_one())
 
     def insert_ai_run(
         self,
@@ -388,28 +257,34 @@ class Database:
         status: str,
         error: str | None = None,
     ) -> int:
-        with self.connect() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO ai_runs (
-                    anomaly_id, provider, model, schema_name, prompt, raw_response,
-                    parsed_json, status, error, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    anomaly_id,
-                    provider,
-                    model,
-                    schema_name,
-                    prompt,
-                    raw_response,
-                    json.dumps(parsed_json) if parsed_json is not None else None,
-                    status,
-                    error,
-                    utc_now(),
+        with self.connect() as connection:
+            result = connection.execute(
+                text(
+                    """
+                    INSERT INTO ai_runs (
+                        anomaly_id, provider, model, schema_name, prompt, raw_response,
+                        parsed_json, status, error, created_at
+                    ) VALUES (
+                        :anomaly_id, :provider, :model, :schema_name, :prompt, :raw_response,
+                        :parsed_json, :status, :error, :created_at
+                    )
+                    RETURNING id
+                    """
                 ),
+                {
+                    "anomaly_id": anomaly_id,
+                    "provider": provider,
+                    "model": model,
+                    "schema_name": schema_name,
+                    "prompt": prompt,
+                    "raw_response": raw_response,
+                    "parsed_json": json.dumps(parsed_json) if parsed_json is not None else None,
+                    "status": status,
+                    "error": error,
+                    "created_at": utc_now(),
+                },
             )
-            return int(cursor.lastrowid)
+            return int(result.scalar_one())
 
     def insert_brief_evidence(
         self,
@@ -419,51 +294,75 @@ class Database:
         reason_used: str,
         rank: int,
     ) -> None:
-        with self.connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO brief_evidence (
-                    ai_run_id, document_id, reason_used, rank, created_at
-                ) VALUES (?, ?, ?, ?, ?)
-                """,
-                (ai_run_id, document_id, reason_used, rank, utc_now()),
+        with self.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO brief_evidence (
+                        ai_run_id, document_id, reason_used, rank, created_at
+                    ) VALUES (
+                        :ai_run_id, :document_id, :reason_used, :rank, :created_at
+                    )
+                    """
+                ),
+                {
+                    "ai_run_id": ai_run_id,
+                    "document_id": document_id,
+                    "reason_used": reason_used,
+                    "rank": rank,
+                    "created_at": utc_now(),
+                },
             )
 
     def get_latest_monitoring_summary_timestamp(self) -> str | None:
-        with self.connect() as conn:
-            row = conn.execute(
-                """
-                SELECT created_at
-                FROM monitoring_summaries
-                ORDER BY created_at DESC
-                LIMIT 1
-                """
-            ).fetchone()
+        with self.connect() as connection:
+            row = (
+                connection.execute(
+                    text(
+                        """
+                        SELECT created_at
+                        FROM monitoring_summaries
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                        """
+                    )
+                )
+                .mappings()
+                .first()
+            )
             return str(row["created_at"]) if row else None
 
     def upsert_status(self, key: str, value: str) -> None:
-        with self.connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO system_status (key, value, updated_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(key) DO UPDATE SET
-                    value = excluded.value,
-                    updated_at = excluded.updated_at
-                """,
-                (key, value, utc_now()),
+        with self.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO system_status (key, value, updated_at)
+                    VALUES (:key, :value, :updated_at)
+                    ON CONFLICT (key) DO UPDATE SET
+                        value = EXCLUDED.value,
+                        updated_at = EXCLUDED.updated_at
+                    """
+                ),
+                {"key": key, "value": value, "updated_at": utc_now()},
             )
 
     def get_status(self, key: str) -> dict[str, str] | None:
-        with self.connect() as conn:
-            row = conn.execute(
-                """
-                SELECT key, value, updated_at
-                FROM system_status
-                WHERE key = ?
-                """,
-                (key,),
-            ).fetchone()
+        with self.connect() as connection:
+            row = (
+                connection.execute(
+                    text(
+                        """
+                        SELECT key, value, updated_at
+                        FROM system_status
+                        WHERE key = :key
+                        """
+                    ),
+                    {"key": key},
+                )
+                .mappings()
+                .first()
+            )
             if not row:
                 return None
             return {
@@ -480,34 +379,25 @@ class Database:
         self.upsert_status("last_collection_time", timestamp)
 
     def reset_monitoring_session(self) -> None:
-        with self.connect() as conn:
-            conn.execute("DELETE FROM explanations")
-            conn.execute("DELETE FROM brief_evidence")
-            conn.execute("DELETE FROM ai_runs")
-            conn.execute("DELETE FROM document_terms")
-            conn.execute("DELETE FROM documents")
-            conn.execute("DELETE FROM news_matches")
-            conn.execute("DELETE FROM anomalies")
-            conn.execute("DELETE FROM aggregated_metrics")
-            conn.execute("DELETE FROM monitoring_summaries")
-            conn.execute("DELETE FROM hn_story_snapshots")
-            conn.execute("DELETE FROM system_status")
-            conn.execute(
-                """
-                DELETE FROM sqlite_sequence
-                WHERE name IN (
-                    'explanations',
-                    'brief_evidence',
-                    'ai_runs',
-                    'document_terms',
-                    'documents',
-                    'news_matches',
-                    'anomalies',
-                    'aggregated_metrics',
-                    'monitoring_summaries',
-                    'hn_story_snapshots'
+        with self.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    TRUNCATE TABLE
+                        brief_evidence,
+                        explanations,
+                        ai_runs,
+                        document_terms,
+                        documents,
+                        news_matches,
+                        anomalies,
+                        aggregated_metrics,
+                        monitoring_summaries,
+                        hn_story_snapshots,
+                        system_status
+                    RESTART IDENTITY CASCADE
+                    """
                 )
-                """
             )
 
 

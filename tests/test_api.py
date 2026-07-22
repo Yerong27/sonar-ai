@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from sonar.api.main import create_app
 from sonar.db import Database, utc_now
@@ -14,8 +14,7 @@ class FakeCollector:
         return None
 
 
-def make_client(tmp_path: Path) -> tuple[TestClient, Database]:
-    database = Database(tmp_path / "sonar-test.db")
+def make_client(database: Database) -> tuple[TestClient, Database]:
     app = create_app(database=database, collector_factory=FakeCollector)
     return TestClient(app), database
 
@@ -24,72 +23,90 @@ def seed_database(database: Database) -> None:
     now = utc_now()
     with database.connect() as conn:
         conn.execute(
-            """
+            text(
+                """
             INSERT INTO hn_story_snapshots (
                 story_id, source_feed, title, author, score, num_comments,
                 created_at, permalink, url, collected_at, monitor_gap_flag,
                 gap_duration_minutes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                "123",
-                "topstories",
-                "Example AI story",
-                "casey",
-                42,
-                7,
-                now,
-                "https://news.ycombinator.com/item?id=123",
-                "https://example.com/story",
-                now,
-                0,
-                None,
+            ) VALUES (
+                :story_id, :source_feed, :title, :author, :score, :num_comments,
+                :created_at, :permalink, :url, :collected_at, :monitor_gap_flag,
+                :gap_duration_minutes
+            )
+                """
             ),
+            {
+                "story_id": "123",
+                "source_feed": "topstories",
+                "title": "Example AI story",
+                "author": "casey",
+                "score": 42,
+                "num_comments": 7,
+                "created_at": now,
+                "permalink": "https://news.ycombinator.com/item?id=123",
+                "url": "https://example.com/story",
+                "collected_at": now,
+                "monitor_gap_flag": 0,
+                "gap_duration_minutes": None,
+            },
         )
-        conn.execute(
-            """
+        anomaly_id = conn.execute(
+            text(
+                """
             INSERT INTO anomalies (
                 source_feed, metric_name, metric_value, baseline_value, z_score,
                 triggered_by, detected_at, news_aligned, explanation_status,
                 metric_version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                "topstories",
-                "story_volume",
-                12.0,
-                4.0,
-                2.4,
-                "story_volume,engagement_score",
-                now,
-                1,
-                "complete",
-                2,
+            ) VALUES (
+                :source_feed, :metric_name, :metric_value, :baseline_value,
+                :z_score, :triggered_by, :detected_at, :news_aligned,
+                :explanation_status, :metric_version
+            )
+            RETURNING id
+                """
             ),
-        )
-        anomaly_id = conn.execute("SELECT id FROM anomalies LIMIT 1").fetchone()["id"]
+            {
+                "source_feed": "topstories",
+                "metric_name": "story_volume",
+                "metric_value": 12.0,
+                "baseline_value": 4.0,
+                "z_score": 2.4,
+                "triggered_by": "story_volume,engagement_score",
+                "detected_at": now,
+                "news_aligned": 1,
+                "explanation_status": "complete",
+                "metric_version": 2,
+            },
+        ).scalar_one()
         conn.execute(
-            """
+            text(
+                """
             INSERT INTO news_matches (
                 anomaly_id, article_count, top_headlines, checked_at
-            ) VALUES (?, ?, ?, ?)
-            """,
-            (
-                anomaly_id,
-                1,
-                json.dumps([{"title": "External confirmation", "url": "https://example.com/news"}]),
-                now,
+            ) VALUES (:anomaly_id, :article_count, :top_headlines, :checked_at)
+                """
             ),
+            {
+                "anomaly_id": anomaly_id,
+                "article_count": 1,
+                "top_headlines": json.dumps(
+                    [{"title": "External confirmation", "url": "https://example.com/news"}]
+                ),
+                "checked_at": now,
+            },
         )
         conn.execute(
-            """
+            text(
+                """
             INSERT INTO explanations (
                 anomaly_id, response_json, created_at
-            ) VALUES (?, ?, ?)
-            """,
-            (
-                anomaly_id,
-                json.dumps(
+            ) VALUES (:anomaly_id, :response_json, :created_at)
+                """
+            ),
+            {
+                "anomaly_id": anomaly_id,
+                "response_json": json.dumps(
                     {
                         "headline_summary": "AI infrastructure story volume spiked",
                         "topic": "AI Infrastructure",
@@ -109,26 +126,50 @@ def seed_database(database: Database) -> None:
                         "summary": "AI infrastructure attention increased in the current monitoring window.",
                     }
                 ),
-                now,
-            ),
+                "created_at": now,
+            },
         )
         conn.execute(
-            """
+            text(
+                """
             INSERT INTO monitoring_summaries (
                 source_scope, response_json, story_count, created_at
-            ) VALUES (?, ?, ?, ?)
-            """,
-            ("all_feeds", json.dumps({"headline_summary": "AI dominates current HN"}), 1, now),
+            ) VALUES (:source_scope, :response_json, :story_count, :created_at)
+                """
+            ),
+            {
+                "source_scope": "all_feeds",
+                "response_json": json.dumps({"headline_summary": "AI dominates current HN"}),
+                "story_count": 1,
+                "created_at": now,
+            },
         )
         conn.execute(
-            """
+            text(
+                """
             INSERT INTO aggregated_metrics (
                 source_feed, window_start, window_end, story_volume, avg_score,
                 avg_comments, engagement_score, growth_rate, metric_version,
                 collected_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            ("topstories", now, now, 12, 42.0, 7.0, 49.0, 1.25, 2, now),
+            ) VALUES (
+                :source_feed, :window_start, :window_end, :story_volume,
+                :avg_score, :avg_comments, :engagement_score, :growth_rate,
+                :metric_version, :collected_at
+            )
+                """
+            ),
+            {
+                "source_feed": "topstories",
+                "window_start": now,
+                "window_end": now,
+                "story_volume": 12,
+                "avg_score": 42.0,
+                "avg_comments": 7.0,
+                "engagement_score": 49.0,
+                "growth_rate": 1.25,
+                "metric_version": 2,
+                "collected_at": now,
+            },
         )
     document_id = database.upsert_document(
         source="hacker_news",
@@ -158,8 +199,8 @@ def seed_database(database: Database) -> None:
     database.set_last_collection_time(now)
 
 
-def test_status_handles_empty_database(tmp_path: Path) -> None:
-    client, _ = make_client(tmp_path)
+def test_status_handles_empty_database(database: Database) -> None:
+    client, _ = make_client(database)
 
     response = client.get("/api/status")
 
@@ -171,8 +212,8 @@ def test_status_handles_empty_database(tmp_path: Path) -> None:
     assert body["counts"]["briefs"] == 0
 
 
-def test_read_endpoints_return_seeded_data(tmp_path: Path) -> None:
-    client, database = make_client(tmp_path)
+def test_read_endpoints_return_seeded_data(database: Database) -> None:
+    client, database = make_client(database)
     seed_database(database)
 
     status = client.get("/api/status").json()
@@ -215,8 +256,8 @@ def test_read_endpoints_return_seeded_data(tmp_path: Path) -> None:
     assert intelligence["notable_stories"][0]["title"] == "Example AI story"
 
 
-def test_brief_detail_and_missing_brief(tmp_path: Path) -> None:
-    client, database = make_client(tmp_path)
+def test_brief_detail_and_missing_brief(database: Database) -> None:
+    client, database = make_client(database)
     seed_database(database)
 
     brief_id = client.get("/api/briefs").json()["briefs"][0]["id"]
@@ -231,8 +272,8 @@ def test_brief_detail_and_missing_brief(tmp_path: Path) -> None:
     assert missing.status_code == 404
 
 
-def test_run_once_uses_injected_collector(tmp_path: Path) -> None:
-    client, _ = make_client(tmp_path)
+def test_run_once_uses_injected_collector(database: Database) -> None:
+    client, _ = make_client(database)
 
     response = client.post("/api/run-once")
 

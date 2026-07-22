@@ -1,15 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
+from sqlalchemy import text
 
 from sonar.ai.evidence_briefs import EvidenceBriefGenerator
 from sonar.ai.provider import FakeProvider
 from sonar.db import Database, utc_now
-
-
-def make_database(tmp_path: Path) -> Database:
-    return Database(tmp_path / "brief-test.db")
-
 
 def anomaly_row() -> dict:
     return {
@@ -46,8 +41,7 @@ def insert_anomaly(database: Database, anomaly: dict) -> None:
     database.insert_anomaly(payload)
 
 
-def test_evidence_brief_generator_stores_audit_and_evidence(tmp_path: Path) -> None:
-    database = make_database(tmp_path)
+def test_evidence_brief_generator_stores_audit_and_evidence(database: Database) -> None:
     anomaly = anomaly_row()
     insert_anomaly(database, anomaly)
     provider = FakeProvider(
@@ -82,14 +76,13 @@ def test_evidence_brief_generator_stores_audit_and_evidence(tmp_path: Path) -> N
     assert brief is not None
     assert brief["confidence"] == 0.81
     with database.connect() as conn:
-        assert conn.execute("SELECT COUNT(*) AS count FROM documents").fetchone()["count"] == 1
-        assert conn.execute("SELECT COUNT(*) AS count FROM ai_runs").fetchone()["count"] == 1
-        assert conn.execute("SELECT COUNT(*) AS count FROM brief_evidence").fetchone()["count"] == 1
-        assert conn.execute("SELECT COUNT(*) AS count FROM explanations").fetchone()["count"] == 1
+        assert conn.execute(text("SELECT COUNT(*) FROM documents")).scalar_one() == 1
+        assert conn.execute(text("SELECT COUNT(*) FROM ai_runs")).scalar_one() == 1
+        assert conn.execute(text("SELECT COUNT(*) FROM brief_evidence")).scalar_one() == 1
+        assert conn.execute(text("SELECT COUNT(*) FROM explanations")).scalar_one() == 1
 
 
-def test_evidence_brief_generator_compacts_verbose_model_output(tmp_path: Path) -> None:
-    database = make_database(tmp_path)
+def test_evidence_brief_generator_compacts_verbose_model_output(database: Database) -> None:
     anomaly = anomaly_row()
     insert_anomaly(database, anomaly)
     provider = FakeProvider(
@@ -128,8 +121,7 @@ def test_evidence_brief_generator_compacts_verbose_model_output(tmp_path: Path) 
     assert brief["confidence"] == 0.49
 
 
-def test_evidence_brief_generator_records_malformed_json_failure(tmp_path: Path) -> None:
-    database = make_database(tmp_path)
+def test_evidence_brief_generator_records_malformed_json_failure(database: Database) -> None:
     anomaly = anomaly_row()
     insert_anomaly(database, anomaly)
     provider = FakeProvider("not json")
@@ -143,8 +135,12 @@ def test_evidence_brief_generator_records_malformed_json_failure(tmp_path: Path)
 
     assert brief is None
     with database.connect() as conn:
-        run = conn.execute("SELECT status, error, raw_response FROM ai_runs").fetchone()
+        run = (
+            conn.execute(text("SELECT status, error, raw_response FROM ai_runs"))
+            .mappings()
+            .one()
+        )
         assert run["status"] == "failed"
         assert run["error"] == "invalid_json"
         assert run["raw_response"] == "not json"
-        assert conn.execute("SELECT COUNT(*) AS count FROM explanations").fetchone()["count"] == 0
+        assert conn.execute(text("SELECT COUNT(*) FROM explanations")).scalar_one() == 0

@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from sonar.ai.brief_schema import normalize_brief_payload
 from sonar.config import settings
@@ -45,20 +46,30 @@ def _json_loads(value: str | None, fallback: Any) -> Any:
 
 def _count(database: Database, table_name: str) -> int:
     with database.connect() as conn:
-        row = conn.execute(f"SELECT COUNT(*) AS count FROM {table_name}").fetchone()
+        row = (
+            conn.execute(text(f"SELECT COUNT(*) AS count FROM {table_name}"))
+            .mappings()
+            .first()
+        )
         return int(row["count"] if row else 0)
 
 
 def _latest_timestamp(database: Database, table_name: str, column_name: str) -> str | None:
     with database.connect() as conn:
-        row = conn.execute(
-            f"""
-            SELECT {column_name} AS timestamp
-            FROM {table_name}
-            ORDER BY {column_name} DESC
-            LIMIT 1
-            """
-        ).fetchone()
+        row = (
+            conn.execute(
+                text(
+                    f"""
+                    SELECT {column_name} AS timestamp
+                    FROM {table_name}
+                    ORDER BY {column_name} DESC
+                    LIMIT 1
+                    """
+                )
+            )
+            .mappings()
+            .first()
+        )
         return str(row["timestamp"]) if row else None
 
 
@@ -203,30 +214,35 @@ def create_app(
     ) -> dict[str, Any]:
         database: Database = api.state.database
         where_clauses: list[str] = []
-        params: list[Any] = []
+        params: dict[str, Any] = {"limit": limit}
         if feed:
-            where_clauses.append("source_feed = ?")
-            params.append(feed)
+            where_clauses.append("source_feed = :feed")
+            params["feed"] = feed
         if since:
-            where_clauses.append("collected_at >= ?")
-            params.append(since)
+            where_clauses.append("collected_at >= :since")
+            params["since"] = since
 
         where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
-        params.append(limit)
 
         with database.connect() as conn:
-            rows = conn.execute(
-                f"""
-                SELECT id, story_id, source_feed, title, author, score, num_comments,
-                       created_at, permalink, url, collected_at, monitor_gap_flag,
-                       gap_duration_minutes
-                FROM hn_story_snapshots
-                {where_sql}
-                ORDER BY collected_at DESC, score DESC, num_comments DESC
-                LIMIT ?
-                """,
-                params,
-            ).fetchall()
+            rows = (
+                conn.execute(
+                    text(
+                        f"""
+                        SELECT id, story_id, source_feed, title, author, score, num_comments,
+                               created_at, permalink, url, collected_at, monitor_gap_flag,
+                               gap_duration_minutes
+                        FROM hn_story_snapshots
+                        {where_sql}
+                        ORDER BY collected_at DESC, score DESC, num_comments DESC
+                        LIMIT :limit
+                        """
+                    ),
+                    params,
+                )
+                .mappings()
+                .all()
+            )
 
         return {"stories": [_row_to_dict(row) for row in rows]}
 
@@ -237,25 +253,30 @@ def create_app(
     ) -> dict[str, Any]:
         database: Database = api.state.database
         where_sql = ""
-        params: list[Any] = []
+        params: dict[str, Any] = {"limit": limit}
         if news_aligned is not None:
-            where_sql = "WHERE news_aligned = ?"
-            params.append(1 if news_aligned else 0)
-        params.append(limit)
+            where_sql = "WHERE news_aligned = :news_aligned"
+            params["news_aligned"] = 1 if news_aligned else 0
 
         with database.connect() as conn:
-            rows = conn.execute(
-                f"""
-                SELECT id, source_feed, metric_name, metric_value, baseline_value,
-                       z_score, triggered_by, detected_at, news_aligned,
-                       explanation_status, metric_version
-                FROM anomalies
-                {where_sql}
-                ORDER BY detected_at DESC, z_score DESC
-                LIMIT ?
-                """,
-                params,
-            ).fetchall()
+            rows = (
+                conn.execute(
+                    text(
+                        f"""
+                        SELECT id, source_feed, metric_name, metric_value, baseline_value,
+                               z_score, triggered_by, detected_at, news_aligned,
+                               explanation_status, metric_version
+                        FROM anomalies
+                        {where_sql}
+                        ORDER BY detected_at DESC, z_score DESC
+                        LIMIT :limit
+                        """
+                    ),
+                    params,
+                )
+                .mappings()
+                .all()
+            )
 
         return {"anomalies": [_row_to_dict(row) for row in rows]}
 
@@ -265,27 +286,35 @@ def create_app(
         feed: str | None = None,
     ) -> dict[str, Any]:
         database: Database = api.state.database
-        where_clauses = ["metric_version = ?"]
-        params: list[Any] = [settings.metric_semantics_version]
+        where_clauses = ["metric_version = :metric_version"]
+        params: dict[str, Any] = {
+            "metric_version": settings.metric_semantics_version,
+            "limit": limit,
+        }
         if feed:
-            where_clauses.append("source_feed = ?")
-            params.append(feed)
+            where_clauses.append("source_feed = :feed")
+            params["feed"] = feed
         where_sql = f"WHERE {' AND '.join(where_clauses)}"
-        params.append(limit)
 
         with database.connect() as conn:
-            rows = conn.execute(
-                f"""
-                SELECT source_feed, window_start, window_end, story_volume,
-                       avg_score, avg_comments, engagement_score, growth_rate,
-                       collected_at
-                FROM aggregated_metrics
-                {where_sql}
-                ORDER BY collected_at DESC
-                LIMIT ?
-                """,
-                params,
-            ).fetchall()
+            rows = (
+                conn.execute(
+                    text(
+                        f"""
+                        SELECT source_feed, window_start, window_end, story_volume,
+                               avg_score, avg_comments, engagement_score, growth_rate,
+                               collected_at
+                        FROM aggregated_metrics
+                        {where_sql}
+                        ORDER BY collected_at DESC
+                        LIMIT :limit
+                        """
+                    ),
+                    params,
+                )
+                .mappings()
+                .all()
+            )
 
         timeline = [_row_to_dict(row) for row in reversed(rows)]
         return {"timeline": timeline}
@@ -297,7 +326,8 @@ def create_app(
 
         with database.connect() as conn:
             top_stories = conn.execute(
-                """
+                text(
+                    """
                 WITH latest_snapshot AS (
                     SELECT story_id, source_feed, MAX(collected_at) AS collected_at
                     FROM hn_story_snapshots
@@ -312,10 +342,12 @@ def create_app(
                  AND latest.collected_at = s.collected_at
                 ORDER BY s.score DESC, s.num_comments DESC
                 LIMIT 8
-                """
-            ).fetchall()
+                    """
+                )
+            ).mappings().all()
             feed_rows = conn.execute(
-                """
+                text(
+                    """
                 WITH latest_snapshot AS (
                     SELECT story_id, source_feed, MAX(collected_at) AS collected_at
                     FROM hn_story_snapshots
@@ -332,20 +364,24 @@ def create_app(
                  AND latest.collected_at = s.collected_at
                 GROUP BY s.source_feed
                 ORDER BY story_count DESC
-                """
-            ).fetchall()
+                    """
+                )
+            ).mappings().all()
             anomaly_rows = conn.execute(
-                """
+                text(
+                    """
                 SELECT id, source_feed, metric_name, metric_value, baseline_value,
                        z_score, triggered_by, detected_at, news_aligned,
                        explanation_status
                 FROM anomalies
                 ORDER BY detected_at DESC, z_score DESC
                 LIMIT 12
-                """
-            ).fetchall()
+                    """
+                )
+            ).mappings().all()
             brief_row = conn.execute(
-                """
+                text(
+                    """
                 SELECT e.id, e.anomaly_id, e.response_json, e.created_at,
                        a.source_feed, a.metric_name, a.z_score,
                        latest_run.provider, latest_run.model,
@@ -365,8 +401,9 @@ def create_app(
                 ) latest_run ON latest_run.anomaly_id = e.anomaly_id
                 ORDER BY e.created_at DESC
                 LIMIT 1
-                """
-            ).fetchone()
+                    """
+                )
+            ).mappings().first()
 
         latest_brief = None
         if brief_row:
@@ -409,7 +446,8 @@ def create_app(
         database: Database = api.state.database
         with database.connect() as conn:
             brief_rows = conn.execute(
-                """
+                text(
+                    """
                 SELECT e.id, e.anomaly_id, e.response_json, e.created_at,
                        a.source_feed, a.metric_name, a.z_score, a.news_aligned,
                        a.triggered_by, a.detected_at,
@@ -430,10 +468,12 @@ def create_app(
                 ) latest_run ON latest_run.anomaly_id = e.anomaly_id
                 ORDER BY e.created_at DESC
                 LIMIT 12
-                """
-            ).fetchall()
+                    """
+                )
+            ).mappings().all()
             story_rows = conn.execute(
-                """
+                text(
+                    """
                 WITH latest_snapshot AS (
                     SELECT story_id, source_feed, MAX(collected_at) AS collected_at
                     FROM hn_story_snapshots
@@ -448,8 +488,9 @@ def create_app(
                  AND latest.collected_at = s.collected_at
                 ORDER BY s.score DESC, s.num_comments DESC
                 LIMIT 80
-                """
-            ).fetchall()
+                    """
+                )
+            ).mappings().all()
 
         briefs: list[dict[str, Any]] = []
         theme_counter: Counter[str] = Counter()
@@ -553,7 +594,8 @@ def create_app(
         database: Database = api.state.database
         with database.connect() as conn:
             rows = conn.execute(
-                """
+                text(
+                    """
                 SELECT e.id, e.anomaly_id, e.response_json, e.created_at,
                        a.source_feed, a.metric_name, a.z_score, a.news_aligned,
                        a.triggered_by, a.detected_at,
@@ -575,10 +617,11 @@ def create_app(
                      AND latest.created_at = ar.created_at
                 ) latest_run ON latest_run.anomaly_id = e.anomaly_id
                 ORDER BY e.created_at DESC
-                LIMIT ?
-                """,
-                (limit,),
-            ).fetchall()
+                LIMIT :limit
+                    """
+                ),
+                {"limit": limit},
+            ).mappings().all()
 
         briefs = []
         for row in rows:
@@ -614,7 +657,8 @@ def create_app(
         database: Database = api.state.database
         with database.connect() as conn:
             row = conn.execute(
-                """
+                text(
+                    """
                 SELECT e.id, e.anomaly_id, e.response_json, e.created_at,
                        a.source_feed, a.metric_name, a.metric_value, a.baseline_value,
                        a.z_score, a.triggered_by, a.detected_at, a.news_aligned,
@@ -642,36 +686,41 @@ def create_app(
                       ON latest.anomaly_id = ar.anomaly_id
                      AND latest.created_at = ar.created_at
                 ) latest_run ON latest_run.anomaly_id = e.anomaly_id
-                WHERE e.id = ?
-                """,
-                (brief_id,),
-            ).fetchone()
+                WHERE e.id = :brief_id
+                    """
+                ),
+                {"brief_id": brief_id},
+            ).mappings().first()
             if not row:
                 raise HTTPException(status_code=404, detail="Brief not found")
 
             news_rows = conn.execute(
-                """
-                SELECT id, article_count, top_headlines, checked_at
-                FROM news_matches
-                WHERE anomaly_id = ?
-                ORDER BY checked_at DESC
-                """,
-                (row["anomaly_id"],),
-            ).fetchall()
+                text(
+                    """
+                    SELECT id, article_count, top_headlines, checked_at
+                    FROM news_matches
+                    WHERE anomaly_id = :anomaly_id
+                    ORDER BY checked_at DESC
+                    """
+                ),
+                {"anomaly_id": row["anomaly_id"]},
+            ).mappings().all()
             evidence_rows = []
             if row["ai_run_id"]:
                 evidence_rows = conn.execute(
-                    """
-                    SELECT be.id, be.reason_used, be.rank,
-                           d.id AS document_id, d.source, d.source_id, d.title,
-                           d.url, d.content, d.metadata_json
-                    FROM brief_evidence be
-                    JOIN documents d ON d.id = be.document_id
-                    WHERE be.ai_run_id = ?
-                    ORDER BY be.rank ASC
-                    """,
-                    (row["ai_run_id"],),
-                ).fetchall()
+                    text(
+                        """
+                        SELECT be.id, be.reason_used, be.rank,
+                               d.id AS document_id, d.source, d.source_id, d.title,
+                               d.url, d.content, d.metadata_json
+                        FROM brief_evidence be
+                        JOIN documents d ON d.id = be.document_id
+                        WHERE be.ai_run_id = :ai_run_id
+                        ORDER BY be.rank ASC
+                        """
+                    ),
+                    {"ai_run_id": row["ai_run_id"]},
+                ).mappings().all()
 
         return {
             "brief": {

@@ -9,6 +9,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def required_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise RuntimeError(f"Required environment variable {name} is not set")
+    return value
+
+
 @dataclass(slots=True)
 class Settings:
     newsapi_key: str = os.getenv("NEWSAPI_KEY", "")
@@ -33,7 +40,7 @@ class Settings:
     dashboard_host: str = os.getenv("SONAR_DASH_HOST", "127.0.0.1")
     dashboard_port: int = int(os.getenv("SONAR_DASH_PORT", "8050"))
     data_dir: Path = Path(__file__).resolve().parent / "data"
-    database_path: Path = Path(__file__).resolve().parent / "data" / "sonar.db"
+    database_url: str = field(default_factory=lambda: required_env("DATABASE_URL"))
     max_story_ids: int = int(os.getenv("SONAR_MAX_STORY_IDS", "60"))
     metric_semantics_version: int = 2
     newsapi_endpoint: str = "https://newsapi.org/v2/everything"

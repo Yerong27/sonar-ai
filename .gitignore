@@ -17,3 +17,8 @@ sonar/data/*.lock
 
 *.log
 *.jsonl
+
+# Local planning and review notes
+PRODUCT_MATURITY_RECOMMENDATIONS.md
+migration_plan.md
+migration_plan_by_step.md
