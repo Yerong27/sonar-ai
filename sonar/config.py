@@ -16,6 +16,10 @@ def required_env(name: str) -> str:
     return value
 
 
+def csv_env(name: str, default: str) -> list[str]:
+    return [value.strip() for value in os.getenv(name, default).split(",") if value.strip()]
+
+
 @dataclass(slots=True)
 class Settings:
     newsapi_key: str = os.getenv("NEWSAPI_KEY", "")
@@ -39,6 +43,14 @@ class Settings:
     monitoring_story_sample_size: int = int(os.getenv("SONAR_MONITORING_STORY_SAMPLE_SIZE", "8"))
     dashboard_host: str = os.getenv("SONAR_DASH_HOST", "127.0.0.1")
     dashboard_port: int = int(os.getenv("SONAR_DASH_PORT", "8050"))
+    cors_origins: list[str] = field(
+        default_factory=lambda: csv_env(
+            "SONAR_CORS_ORIGINS",
+            "https://sonar-ai-radar.liyerongvv.chatgpt.site,"
+            "http://localhost:5173,http://127.0.0.1:5173,"
+            "http://localhost:5174,http://127.0.0.1:5174",
+        )
+    )
     data_dir: Path = Path(__file__).resolve().parent / "data"
     database_url: str = field(default_factory=lambda: required_env("DATABASE_URL"))
     max_story_ids: int = int(os.getenv("SONAR_MAX_STORY_IDS", "60"))

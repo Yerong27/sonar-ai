@@ -9,13 +9,8 @@ from sonar.api.main import create_app
 from sonar.db import Database, utc_now
 
 
-class FakeCollector:
-    def run_once(self) -> None:
-        return None
-
-
 def make_client(database: Database) -> tuple[TestClient, Database]:
-    app = create_app(database=database, collector_factory=FakeCollector)
+    app = create_app(database=database)
     return TestClient(app), database
 
 
@@ -212,6 +207,30 @@ def test_status_handles_empty_database(database: Database) -> None:
     assert body["counts"]["briefs"] == 0
 
 
+def test_health_endpoints(database: Database) -> None:
+    client, _ = make_client(database)
+
+    assert client.get("/health/live").json() == {"status": "ok"}
+    assert client.get("/health/ready").json() == {"status": "ready"}
+
+
+def test_production_frontend_origin_is_allowed(database: Database) -> None:
+    client, _ = make_client(database)
+
+    response = client.options(
+        "/api/status",
+        headers={
+            "Origin": "https://sonar-ai-radar.liyerongvv.chatgpt.site",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == (
+        "https://sonar-ai-radar.liyerongvv.chatgpt.site"
+    )
+
+
 def test_read_endpoints_return_seeded_data(database: Database) -> None:
     client, database = make_client(database)
     seed_database(database)
@@ -272,10 +291,9 @@ def test_brief_detail_and_missing_brief(database: Database) -> None:
     assert missing.status_code == 404
 
 
-def test_run_once_uses_injected_collector(database: Database) -> None:
+def test_run_once_is_not_public(database: Database) -> None:
     client, _ = make_client(database)
 
     response = client.post("/api/run-once")
 
-    assert response.status_code == 200
-    assert response.json() == {"status": "completed", "cycle": None}
+    assert response.status_code == 404

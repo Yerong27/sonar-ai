@@ -1,3 +1,9 @@
+x-sonar-app: &sonar-app
+  image: sonar-app:local
+  build:
+    context: .
+    dockerfile: Dockerfile.api
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -16,24 +22,24 @@ services:
       retries: 10
 
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
+    <<: *sonar-app
     ports:
       - "8060:8060"
     environment:
       DATABASE_URL: postgresql+psycopg://sonar:${POSTGRES_PASSWORD:-change-me}@postgres:5432/sonar
+      PORT: 8060
+      SONAR_CORS_ORIGINS: ${SONAR_CORS_ORIGINS:-https://sonar-ai-radar.liyerongvv.chatgpt.site,http://localhost:5173,http://127.0.0.1:5173}
     depends_on:
       postgres:
         condition: service_healthy
 
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-    command: python -m sonar.worker
+    <<: *sonar-app
+    command: python -m sonar.worker --once
     environment:
       DATABASE_URL: postgresql+psycopg://sonar:${POSTGRES_PASSWORD:-change-me}@postgres:5432/sonar
+      NEWSAPI_KEY: ${NEWSAPI_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,6 +52,17 @@ services:
       - "8050:8050"
     volumes:
       - sonar-data:/app/sonar/data
+
+  migrate:
+    <<: *sonar-app
+    command: alembic upgrade head
+    profiles:
+      - tools
+    environment:
+      DATABASE_URL: postgresql+psycopg://sonar:${POSTGRES_PASSWORD:-change-me}@postgres:5432/sonar
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   frontend:
     build:

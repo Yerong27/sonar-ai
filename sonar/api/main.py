@@ -4,19 +4,17 @@ import json
 import math
 import re
 from collections import Counter
-from collections.abc import Callable
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from sonar.ai.brief_schema import normalize_brief_payload
 from sonar.config import settings
 from sonar.db import Database, db
-from sonar.ingestion.collector import SonarCollector
 
-CollectorFactory = Callable[[], SonarCollector]
 STOP_WORDS = {
     "about", "after", "again", "against", "also", "and", "are", "because", "before",
     "being", "between", "could", "for", "from", "has", "have", "into", "its",
@@ -164,24 +162,31 @@ def _build_keyword_signals(keywords: list[str], stories: list[dict[str, Any]]) -
 def create_app(
     *,
     database: Database | None = None,
-    collector_factory: CollectorFactory | None = None,
 ) -> FastAPI:
     api = FastAPI(title="Sonar API", version="0.1.0")
     api.state.database = database or db
-    api.state.collector_factory = collector_factory or SonarCollector
 
     api.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost:5174",
-            "http://127.0.0.1:5174",
-        ],
+        allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @api.get("/health/live", include_in_schema=False)
+    def health_live() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @api.get("/health/ready", include_in_schema=False)
+    def health_ready() -> dict[str, str]:
+        database: Database = api.state.database
+        try:
+            with database.connect() as conn:
+                conn.execute(text("SELECT 1")).scalar_one()
+        except SQLAlchemyError as exc:
+            raise HTTPException(status_code=503, detail="Database unavailable") from exc
+        return {"status": "ready"}
 
     @api.get("/api/status")
     def get_status() -> dict[str, Any]:
@@ -780,16 +785,6 @@ def create_app(
                 for evidence_row in evidence_rows
             ],
         }
-
-    @api.post("/api/run-once")
-    def run_once() -> dict[str, Any]:
-        collector = api.state.collector_factory()
-        try:
-            result = collector.run_once()
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
-        payload = result.to_dict() if hasattr(result, "to_dict") else None
-        return {"status": "completed", "cycle": payload}
 
     return api
 

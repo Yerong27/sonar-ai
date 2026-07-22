@@ -1,11 +1,15 @@
 .DS_Store
 .env
+.env.*
 .git
 .pytest_cache
 .venv
 __pycache__
+*.log
+*.jsonl
 frontend/dist
 frontend/node_modules
 sonar/data/*.db
 sonar/data/*.sqlite
 sonar/data/*.sqlite3
+sonar/data/*.lock
