@@ -36,13 +36,10 @@ class Settings:
         os.getenv("SONAR_MONITOR_GAP_THRESHOLD_SECONDS", "600")
     )
     alert_window_minutes: int = int(os.getenv("SONAR_ALERT_WINDOW_MINUTES", "30"))
-    dashboard_refresh_ms: int = int(os.getenv("SONAR_DASH_REFRESH_MS", "30000"))
     anomaly_window: int = int(os.getenv("SONAR_ANOMALY_WINDOW", "6"))
     anomaly_zscore_threshold: float = float(os.getenv("SONAR_ZSCORE_THRESHOLD", "2.0"))
     monitoring_interval_seconds: int = int(os.getenv("SONAR_MONITORING_INTERVAL_SECONDS", "1800"))
     monitoring_story_sample_size: int = int(os.getenv("SONAR_MONITORING_STORY_SAMPLE_SIZE", "8"))
-    dashboard_host: str = os.getenv("SONAR_DASH_HOST", "127.0.0.1")
-    dashboard_port: int = int(os.getenv("SONAR_DASH_PORT", "8050"))
     cors_origins: list[str] = field(
         default_factory=lambda: csv_env(
             "SONAR_CORS_ORIGINS",

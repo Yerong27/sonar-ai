@@ -44,15 +44,6 @@ services:
       postgres:
         condition: service_healthy
 
-  dash:
-    build:
-      context: .
-      dockerfile: Dockerfile.dash
-    ports:
-      - "8050:8050"
-    volumes:
-      - sonar-data:/app/sonar/data
-
   migrate:
     <<: *sonar-app
     command: alembic upgrade head
@@ -74,5 +65,4 @@ services:
       - api
 
 volumes:
-  sonar-data:
   sonar-postgres:
