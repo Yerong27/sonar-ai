@@ -275,6 +275,81 @@ def test_read_endpoints_return_seeded_data(database: Database) -> None:
     assert intelligence["notable_stories"][0]["title"] == "Example AI story"
 
 
+def test_ai_intelligence_uses_monitoring_summary_without_anomalies(
+    database: Database,
+) -> None:
+    client, database = make_client(database)
+    now = utc_now()
+    with database.connect() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO hn_story_snapshots (
+                    story_id, source_feed, title, author, score, num_comments,
+                    created_at, permalink, url, collected_at, monitor_gap_flag,
+                    gap_duration_minutes
+                ) VALUES (
+                    :story_id, 'topstories', :title, 'casey', 240, 80,
+                    :created_at, :permalink, :url, :collected_at, 0, NULL
+                )
+                """
+            ),
+            {
+                "story_id": "monitor-1",
+                "title": "Open source AI infrastructure accelerates",
+                "created_at": now,
+                "permalink": "https://news.ycombinator.com/item?id=monitor-1",
+                "url": "https://example.com/ai",
+                "collected_at": now,
+            },
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO monitoring_summaries (
+                    source_scope, response_json, story_count, created_at
+                ) VALUES ('all_feeds', :response_json, 8, :created_at)
+                """
+            ),
+            {
+                "response_json": json.dumps(
+                    {
+                        "headline_summary": "Open AI infrastructure leads Hacker News",
+                        "top_keywords": ["AI", "Open Source"],
+                        "top_topics": ["AI Infrastructure", "Developer Tools"],
+                        "dominant_theme": "AI Infrastructure",
+                        "sentiment_distribution": {
+                            "positive": 0.5,
+                            "negative": 0.1,
+                            "neutral": 0.3,
+                            "mixed": 0.1,
+                        },
+                        "notable_story_ids": ["monitor-1"],
+                        "bullet_insights": ["Open source models lead current engagement."],
+                        "summary": "Open AI infrastructure stories lead the current window.",
+                    }
+                ),
+                "created_at": now,
+            },
+        )
+
+    intelligence = client.get("/api/ai/intelligence").json()
+
+    assert intelligence["latest_brief"]["summary_kind"] == "monitoring_summary"
+    assert intelligence["latest_brief"]["headline_summary"] == (
+        "Open AI infrastructure leads Hacker News"
+    )
+    assert intelligence["latest_brief"]["evidence_count"] == 8
+    assert intelligence["ranked_themes"][0]["theme"] == "AI Infrastructure"
+    assert intelligence["sentiment_distribution"][0] == {
+        "label": "positive",
+        "count": 0.5,
+    }
+    assert intelligence["keyword_bubbles"][0]["keyword"] == "AI"
+    assert intelligence["notable_stories"][0]["story_id"] == "monitor-1"
+    assert intelligence["event_briefs"] == []
+
+
 def test_brief_detail_and_missing_brief(database: Database) -> None:
     client, database = make_client(database)
     seed_database(database)

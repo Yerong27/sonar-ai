@@ -466,19 +466,32 @@ export default function Dashboard() {
   const anomalies = data.anomalies || [];
   const alertCount = anomalies.filter((item) => Number(item.z_score || 0) >= 3).length;
   const metricData = data.metrics.map((row) => ({ ...row, time: formatTime(row.collected_at) }));
-  const scatterData = anomalies.map((row, index) => ({
-    ...row,
-    timeIndex: index + 1,
-    volume: Math.max(0.1, Number(row.metric_value || index + 1)),
-    velocity: Math.max(0.1, Number(row.z_score || 0)),
-    size: Math.max(60, Number(row.metric_value || 1)),
-  }));
+  const scatterData = anomalies.length
+    ? anomalies.map((row, index) => ({
+        ...row,
+        timeIndex: index + 1,
+        volume: Math.max(0.1, Number(row.metric_value || index + 1)),
+        velocity: Math.max(0.1, Number(row.z_score || 0)),
+        size: Math.max(60, Number(row.metric_value || 1)),
+        signalType: "Anomaly",
+      }))
+    : data.metrics.map((row, index) => ({
+        ...row,
+        id: `${row.source_feed}-${row.collected_at}-${index}`,
+        timeIndex: index + 1,
+        volume: Math.max(0.1, Number(row.story_volume || 0)),
+        velocity: Math.max(0.01, Math.abs(Number(row.growth_rate || 0))),
+        size: Math.max(60, Number(row.engagement_score || 1)),
+        signalType: "Baseline",
+      }));
   const eventBriefs = intelligence.event_briefs || [];
   const selectedBrief = eventBriefs.find((brief: Row) => brief.id === openBrief) || eventBriefs[0] || {};
   const totalScore = data.stories.reduce((sum, row) => sum + Number(row.score || 0), 0);
   const totalComments = data.stories.reduce((sum, row) => sum + Number(row.num_comments || 0), 0);
   const emergingTopics = (intelligence.ranked_themes || []).slice(0, 5);
   const maxTopicScore = Math.max(...emergingTopics.map((item: Row) => Number(item.score || 0)), 1);
+  const sentimentData = intelligence.sentiment_distribution || [];
+  const hasSentiment = sentimentData.some((item: Row) => Number(item.count || 0) > 0);
   const storyPageSize = 10;
   const storyTotalPages = Math.max(1, Math.ceil(filteredStories.length / storyPageSize));
   const safeStoryPage = Math.min(storyPage, storyTotalPages);
@@ -659,22 +672,40 @@ export default function Dashboard() {
                     </button>
                   );
                 })}
+                {!emergingTopics.length && (
+                  <div className="panel-empty-state">
+                    <b>Building the semantic baseline</b>
+                    <span>Topics will appear after the first successful Gemini landscape summary.</span>
+                  </div>
+                )}
               </div>
             </Panel>
 
             <Panel title="Signal velocity" className="velocity-panel">
-              <ResponsiveContainer width="100%" height="100%">
-                <ScatterChart margin={{ left: 2, right: 20, top: 8, bottom: 0 }}>
-                  <CartesianGrid stroke="rgba(112,151,204,.10)" />
-                  <XAxis type="number" dataKey="volume" name="Volume" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis type="number" dataKey="velocity" name="Velocity" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={40} />
-                  <ZAxis type="number" dataKey="size" range={[55, 190]} />
-                  <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltip />} />
-                  <Scatter data={scatterData}>
-                    {scatterData.map((item, index) => <Cell key={item.id || index} fill={item.news_aligned ? COLORS.orange : COLORS.cyan} />)}
-                  </Scatter>
-                </ScatterChart>
-              </ResponsiveContainer>
+              {scatterData.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ScatterChart margin={{ left: 2, right: 20, top: 8, bottom: 0 }}>
+                    <CartesianGrid stroke="rgba(112,151,204,.10)" />
+                    <XAxis type="number" dataKey="volume" name="Volume" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis type="number" dataKey="velocity" name="Velocity" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={40} />
+                    <ZAxis type="number" dataKey="size" range={[55, 190]} />
+                    <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltip />} />
+                    <Scatter data={scatterData}>
+                      {scatterData.map((item, index) => (
+                        <Cell
+                          key={item.id || index}
+                          fill={item.signalType === "Anomaly" && item.news_aligned ? COLORS.orange : COLORS.cyan}
+                        />
+                      ))}
+                    </Scatter>
+                  </ScatterChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="panel-empty-state">
+                  <b>Waiting for the first metrics window</b>
+                  <span>Velocity will populate after the collector records a baseline.</span>
+                </div>
+              )}
             </Panel>
 
             <Panel title="Signal feed (live)" className="signal-feed-panel">
@@ -741,8 +772,12 @@ export default function Dashboard() {
         <div className="ai-grid">
           <article className="latest-brief">
             <div className="brief-heading">
-              <span>Current assessment</span>
-              <span className="confidence">{Math.round(Number(latestBrief?.confidence || 0) * 100)}% confidence</span>
+              <span>{latestBrief?.summary_kind === "monitoring_summary" ? "Current landscape" : "Current assessment"}</span>
+              <span className="confidence">
+                {latestBrief?.summary_kind === "monitoring_summary"
+                  ? "Gemini landscape summary"
+                  : `${Math.round(Number(latestBrief?.confidence || 0) * 100)}% confidence`}
+              </span>
             </div>
             <h3>{latestBrief?.headline_summary || "No AI brief generated yet"}</h3>
             <p>{latestBrief?.summary}</p>
@@ -756,11 +791,18 @@ export default function Dashboard() {
             </div>
           </article>
           <Panel title="Ranked themes" className="theme-panel">
-            <ol>
-              {(intelligence.ranked_themes || []).slice(0, 6).map((item: Row) => (
-                <li key={item.theme}><span>{String(item.rank).padStart(2, "0")}</span><b>{item.theme}</b><i>{item.score}</i></li>
-              ))}
-            </ol>
+            {(intelligence.ranked_themes || []).length ? (
+              <ol>
+                {(intelligence.ranked_themes || []).slice(0, 6).map((item: Row) => (
+                  <li key={item.theme}><span>{String(item.rank).padStart(2, "0")}</span><b>{item.theme}</b><i>{item.score}</i></li>
+                ))}
+              </ol>
+            ) : (
+              <div className="panel-empty-state compact">
+                <b>No themes classified yet</b>
+                <span>The next Gemini landscape summary will populate this ranking.</span>
+              </div>
+            )}
           </Panel>
           <Panel title="Heading visibility" className="visibility-panel">
             <ResponsiveContainer width="100%" height={210}>
@@ -774,19 +816,26 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </Panel>
           <Panel title="Signal sentiment" className="sentiment-panel">
-            <ResponsiveContainer width="100%" height={210}>
-              <BarChart data={intelligence.sentiment_distribution || []}>
-                <CartesianGrid stroke="rgba(112,151,204,.10)" vertical={false} />
-                <XAxis dataKey="label" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={30} />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="count" name="Briefs" radius={[3, 3, 0, 0]}>
-                  {(intelligence.sentiment_distribution || []).map((item: Row) => (
-                    <Cell key={item.label} fill={{ positive: COLORS.green, negative: COLORS.red, neutral: "#7f8da5", mixed: COLORS.orange }[item.label as string] || COLORS.cyan} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            {hasSentiment ? (
+              <ResponsiveContainer width="100%" height={210}>
+                <BarChart data={sentimentData}>
+                  <CartesianGrid stroke="rgba(112,151,204,.10)" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={30} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Bar dataKey="count" name="Share" radius={[3, 3, 0, 0]}>
+                    {sentimentData.map((item: Row) => (
+                      <Cell key={item.label} fill={{ positive: COLORS.green, negative: COLORS.red, neutral: "#7f8da5", mixed: COLORS.orange }[item.label as string] || COLORS.cyan} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="panel-empty-state compact">
+                <b>No sentiment distribution yet</b>
+                <span>The next semantic scan will classify the current story landscape.</span>
+              </div>
+            )}
           </Panel>
           <Panel title="Keywords explorer" className="keyword-panel">
             <div className="interactive-panel-heading">
