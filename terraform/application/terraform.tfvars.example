@@ -1,0 +1,23 @@
+project_id                      = "sonar-ai-prod"
+region                          = "australia-southeast1"
+github_repository               = "Yerong27/sonar-ai"
+workload_identity_pool_name     = "projects/476810083673/locations/global/workloadIdentityPools/github-actions"
+terraform_deployer_email         = "sonar-terraform-deployer@sonar-ai-prod.iam.gserviceaccount.com"
+frontend_origin                 = "https://sonar-ai-radar.liyerongvv.chatgpt.site"
+collector_schedule              = "0 */6 * * *"
+collector_schedule_time_zone    = "Etc/UTC"
+scheduler_paused                 = true
+api_min_instances               = 0
+api_max_instances               = 2
+cloud_sql_tier                  = "db-f1-micro"
+cloud_sql_deletion_protection   = true
+manage_budget                   = false
+billing_account_id              = "019479-9F863D-88584D"
+monthly_budget_amount           = 50
+
+# First apply: keep false and empty so base infrastructure exists before an image.
+deploy_workloads = false
+initial_image    = ""
+
+# Second apply: set deploy_workloads=true and pin the first pushed image by digest.
+# initial_image = "australia-southeast1-docker.pkg.dev/sonar-ai-prod/sonar/sonar-api@sha256:<64-lowercase-hex>"

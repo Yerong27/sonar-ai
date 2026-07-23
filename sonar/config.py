@@ -52,7 +52,7 @@ class Settings:
     metric_semantics_version: int = 2
     newsapi_endpoint: str = "https://newsapi.org/v2/everything"
     hn_base_url: str = "https://hacker-news.firebaseio.com/v0"
-    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
 
 settings = Settings()

@@ -1,0 +1,6 @@
+project_id            = "sonar-ai-prod"
+region                = "australia-southeast1"
+state_bucket_name     = "sonar-ai-prod-terraform-state"
+github_repository     = "Yerong27/sonar-ai"
+grant_terraform_budget_role = false
+billing_account_id           = "019479-9F863D-88584D"

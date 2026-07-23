@@ -22,3 +22,13 @@ sonar/data/*.lock
 PRODUCT_MATURITY_RECOMMENDATIONS.md
 migration_plan.md
 migration_plan_by_step.md
+
+# Terraform local files and potentially sensitive inputs
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+*.tfplan
+crash.log
+terraform/bootstrap/backend.tf

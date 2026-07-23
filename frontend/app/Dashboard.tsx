@@ -114,7 +114,7 @@ const demoBriefs = [
     z_score: 3.8,
     triggered_by: "engagement_score",
     ai_status: "complete",
-    model: "gemini-2.5-flash",
+    model: "gemini-3.5-flash-lite",
     bullet_insights: [
       "Local inference and coding agents account for most of the current engagement gain.",
       "Discussion spans cost, privacy, and developer control rather than a single product launch.",
@@ -136,7 +136,7 @@ const demoBriefs = [
     z_score: 2.9,
     triggered_by: "story_volume",
     ai_status: "complete",
-    model: "gemini-2.5-flash",
+    model: "gemini-3.5-flash-lite",
     bullet_insights: ["Search infrastructure is the second-largest topic cluster.", "Interest is distributed across several stories.", "External confirmation remains limited."],
   },
   {
@@ -154,7 +154,7 @@ const demoBriefs = [
     z_score: 2.6,
     triggered_by: "avg_comments",
     ai_status: "complete",
-    model: "gemini-2.5-flash",
+    model: "gemini-3.5-flash-lite",
     bullet_insights: ["Comment velocity is high relative to score.", "Most discussion focuses on review burden.", "The topic may persist beyond the current window."],
   },
 ];
@@ -566,7 +566,7 @@ export default function Dashboard() {
       {(notice || data.mode === "demo") && (
         <div className="demo-banner">
           <Sparkles size={14} />
-          {notice || "Portfolio demo mode — the deployed dashboard uses a curated snapshot; local mode connects to FastAPI."}
+          {notice || "Hosted demo mode — the deployed dashboard uses a curated snapshot; local mode connects to FastAPI."}
         </div>
       )}
 
@@ -953,7 +953,7 @@ export default function Dashboard() {
 
       <footer>
         <span><Activity size={14} /> Sonar AI</span>
-        <p>Local-first signal intelligence · FastAPI + React + SQLite + Gemini</p>
+        <p>Technology signal monitoring · FastAPI + React + PostgreSQL + Gemini</p>
       </footer>
     </main>
   );
