@@ -6,7 +6,7 @@ The repository covers the complete operating path: collection, PostgreSQL persis
 
 ## Current Status
 
-Phase 4 of the migration is deployed and verified in GCP. The API, database, scheduled collector, migrations, secrets, container registry, and Terraform state are running in the Sydney region. Phase 5 delivery automation and the public frontend cutover remain to be completed; they are listed explicitly below so this README does not describe planned behavior as live behavior.
+Phase 4 of the migration is deployed and verified in GCP. The API, database, scheduled collector, migrations, secrets, container registry, and Terraform state are running in the Sydney region. Phase 5 workflow configuration and runbooks are implemented in the repository; their first GitHub execution, rollback exercise, and the public frontend cutover still require manual acceptance.
 
 | Surface or service | Status | Location |
 | --- | --- | --- |
@@ -173,6 +173,8 @@ curl -fsS https://sonar-api-4akcp3ehqa-ts.a.run.app/api/status
 Run backend tests against the dedicated PostgreSQL test database:
 
 ```bash
+python -m pip install -r requirements-dev.txt
+python -m ruff check sonar tests alembic
 python -m pytest -q
 ```
 
@@ -199,20 +201,22 @@ Infrastructure is split deliberately:
 - [`terraform/bootstrap`](terraform/bootstrap/README.md) creates the remote-state bucket, Workload Identity Federation provider, and Terraform deployer identity needed before remote state can be used.
 - [`terraform/application`](terraform/application/README.md) creates application APIs, Artifact Registry, Cloud SQL, Secret Manager containers, least-privilege service accounts, Cloud Run workloads, and Cloud Scheduler.
 - [`docs/gcp-phase4-runbook.md`](docs/gcp-phase4-runbook.md) documents initialization, secret provisioning, image deployment, migrations, verification, and cleanup.
+- [`docs/phase5-github-actions.md`](docs/phase5-github-actions.md) documents CI/CD ownership, WIF, workflow sequencing, GitHub Environment setup, and Sites cutover.
+- [`docs/application-rollback.md`](docs/application-rollback.md) records the tested application rollback boundary and commands.
+- [`docs/cost-and-cleanup.md`](docs/cost-and-cleanup.md) explains normal cost controls, pausing collection, and destructive-cleanup safeguards.
 
 Real secret values, local `terraform.tfvars`, state files, and saved plans are excluded from Git. The monthly GCP budget alert is managed manually in the Cloud Console; it is not a hard spending cap.
 
-## Phase 5 Completion Target
+## Phase 5 Acceptance Status
 
-The infrastructure required for GitHub delivery already exists, but these items are not yet implemented or verified:
+The repository now contains:
 
-1. Add a pull-request workflow for Python tests, PostgreSQL integration tests, Alembic validation, frontend build, container build, and Terraform validation.
-2. Add a deployment workflow that authenticates through WIF, builds one commit-addressable image, runs migrations, updates the collector, deploys the API, and verifies readiness.
-3. Add a separate manually approved Terraform workflow using the Terraform deployer identity.
-4. Configure the Sites build with the production API base and republish the dashboard against live Cloud SQL data.
-5. Verify the new API revision, perform and verify an application-image rollback, and document the procedure. Database schema rollback remains a separate manual decision.
+1. PR and `main` CI for Ruff, PostgreSQL tests, Alembic validation, frontend build, container build, and Terraform validation.
+2. A post-CI deployment workflow that authenticates through WIF, builds one immutable image, runs migrations, updates the collector, deploys the API, verifies readiness, and records rollback inputs.
+3. A separate manually triggered Terraform workflow using the Terraform deployer identity and GCS remote state.
+4. GitHub setup, application rollback, Sites cutover, and cost/cleanup runbooks.
 
-Phase 5 is complete only after a push to `main` has exercised the workflows successfully, the public dashboard displays live data, and the rollback test has been performed.
+Manual acceptance remains: configure the `production` and `infrastructure` GitHub Environments, exercise the workflows from GitHub, diagnose one real workflow failure, verify a rollback and redeploy, set the Sites production API variable, and publish the live-data frontend. Phase 5 is complete only after those checks pass.
 
 ## Project Layout
 
@@ -240,7 +244,7 @@ Sonar/
 ## Current Limitations
 
 - The public Sites build still displays snapshot data until the Phase 5 frontend cutover.
-- Application and Terraform GitHub Actions workflows are not yet present.
+- Phase 5 workflows are not accepted until their first real GitHub runs and rollback exercise succeed.
 - The deployment is single-region, zonal, and intentionally sized for a low-traffic system.
 - The API has no end-user authentication or rate-limiting layer; only read-only routes are public.
 - NewsAPI and Gemini behavior depends on provider availability, quota, and configured credentials.
