@@ -1,84 +1,94 @@
 # Sonar AI
 
-Sonar AI is a technology-signal monitoring and evidence-analysis system. It collects Hacker News activity, tracks engagement over time, detects unusual changes, validates relevant events against external news, and produces evidence-linked AI summaries.
+Sonar AI is a Hacker News signal-monitoring and evidence-analysis system. It collects story activity over time, measures changes in engagement, detects unusual behavior, and uses Gemini to turn the current technology landscape into structured, traceable intelligence.
 
-The repository covers the complete operating path: collection, PostgreSQL persistence, anomaly detection, model audit records, a read-only FastAPI service, an interactive React dashboard, containerized workloads, and GCP infrastructure managed with Terraform.
+The project includes a live dashboard, a read-only FastAPI service, a scheduled collection pipeline, PostgreSQL persistence, AI audit records, containerized workloads, and reproducible GCP infrastructure.
 
-## Current Status
+## Live Application
 
-Phase 4 of the migration is deployed and verified in GCP. The API, database, scheduled collector, migrations, secrets, container registry, and Terraform state are running in the Sydney region. Phase 5 workflow configuration and runbooks are implemented in the repository; their first GitHub execution, rollback exercise, and the public frontend cutover still require manual acceptance.
+| Surface | URL |
+| --- | --- |
+| Dashboard | [Sonar AI Radar](https://sonar-ai-radar.liyerongvv.chatgpt.site) |
+| API status | [FastAPI status](https://sonar-api-4akcp3ehqa-ts.a.run.app/api/status) |
 
-| Surface or service | Status | Location |
-| --- | --- | --- |
-| Public dashboard | Deployed with a curated snapshot | [Open Sonar AI Radar](https://sonar-ai-radar.liyerongvv.chatgpt.site) |
-| FastAPI | Deployed and reading Cloud SQL | [Open API status](https://sonar-api-4akcp3ehqa-ts.a.run.app/api/status) |
-| PostgreSQL | Cloud SQL for PostgreSQL 16 | `australia-southeast1` |
-| Collector | Cloud Run Job, scheduled every six hours | Cloud Scheduler, UTC |
-| Schema migrations | Alembic through a dedicated Cloud Run Job | Run before application revisions |
-| Application image | Artifact Registry, pinned by digest | Shared by API, collector, and migration jobs |
-| Infrastructure state | Versioned GCS remote state | Separate bootstrap and application roots |
-
-The public dashboard still uses its built-in snapshot because `NEXT_PUBLIC_SONAR_API_BASE` has not yet been applied to the Sites deployment. Local frontend builds can connect directly to FastAPI, and the cloud API already exposes live Cloud SQL data.
+The public dashboard reads live data from the production API. If the API is unavailable, the frontend can fall back to a curated demonstration snapshot rather than rendering a broken page.
 
 ## What Sonar Does
 
-- collects `topstories` and `newstories` through the official Hacker News Firebase API
-- records time-based story snapshots instead of overwriting prior observations
-- aggregates volume, score, comment, engagement, and growth metrics
-- detects statistically unusual activity and persists the supporting data
-- optionally validates events with NewsAPI
-- optionally generates structured Gemini summaries from stored evidence
-- preserves prompts, provider/model metadata, raw output, parsed output, status, and errors for auditability
-- exposes low-cost, read-only API endpoints to the React dashboard
-- links story titles and interactive visual elements to the corresponding Hacker News discussion
+- collects Hacker News `topstories` and `newstories`
+- stores time-based snapshots instead of overwriting previous observations
+- calculates story volume, score, comment, engagement, and growth metrics
+- detects statistically unusual changes against recent feed history
+- produces a Gemini landscape summary from the strongest current stories
+- generates evidence-backed event briefs when an anomaly is detected
+- optionally checks external NewsAPI coverage for supporting context
+- preserves prompts, model metadata, raw responses, parsed output, and errors
+- connects charts, themes, keywords, and story lists to individual Hacker News discussions
 
-Sonar continues to collect and analyze Hacker News data when NewsAPI or Gemini credentials are absent. Only the corresponding enrichment step is skipped.
+## AI Analysis
+
+Sonar uses two complementary forms of AI analysis.
+
+### Landscape monitoring
+
+After a collection cycle, Gemini summarizes a ranked sample of current stories. The result powers the dashboard's current landscape, ranked themes, sentiment distribution, keyword explorer, notable stories, and concise monitoring insights.
+
+### Evidence-backed event briefs
+
+When a metric crosses the anomaly threshold, Sonar selects the strongest event per feed, gathers Hacker News and optional external-news evidence, and requests a structured brief. Each result remains linked to the anomaly, source documents, model execution, and exact evidence used.
+
+Gemini and NewsAPI are optional enrichments. Collection, storage, metrics, anomaly detection, and the read-only API continue to operate when either provider is unavailable.
 
 ## Architecture
 
 ```text
-                         Cloud Scheduler (every 6 hours)
-                                      |
-                                      v
-Hacker News API -----> Cloud Run collector Job <----- NewsAPI / Gemini
-                                      |
-                                      v
-                           Cloud SQL PostgreSQL
-                                      |
-                                      v
-React dashboard <----- Cloud Run FastAPI Service
+Cloud Scheduler (every 6 hours)
+              |
+              v
+     Cloud Run collector Job <------ Hacker News / NewsAPI / Gemini
+              |
+              v
+     Cloud SQL for PostgreSQL
+              |
+              v
+       Cloud Run FastAPI <---------- Sites React dashboard
 
-Deployment support:
-GitHub WIF identities -> Artifact Registry / Cloud Run / Terraform
-Terraform bootstrap   -> GCS remote state + deployer identity + WIF
-Terraform application -> SQL, secrets, runtime identities, API, jobs, scheduler
+Delivery and infrastructure:
+GitHub Actions + Workload Identity Federation
+Artifact Registry + Cloud Run
+Terraform + versioned GCS remote state
+Secret Manager for runtime credentials
 ```
 
-The API, collector, and migration job use separate service accounts. Runtime secrets are stored in Secret Manager rather than Terraform variables or container images. Cloud Run connects to Cloud SQL through its managed Unix socket.
+Production resources run in the GCP Sydney region (`australia-southeast1`). The API, collector, and migration job use separate service accounts and connect to Cloud SQL through the managed Unix socket.
+
+## Main Components
+
+| Component | Responsibility |
+| --- | --- |
+| `sonar/ingestion` | Hacker News and NewsAPI clients |
+| `sonar/processing` | Metrics and anomaly detection |
+| `sonar/ai` | Gemini monitoring summaries and evidence briefs |
+| `sonar/services` | Retry-safe collection pipeline orchestration |
+| `sonar/api` | Public read-only FastAPI endpoints |
+| `frontend` | Interactive React dashboard |
+| `alembic` | Versioned PostgreSQL schema migrations |
+| `terraform` | GCP identity, state, database, jobs, API, and scheduler |
+| `.github/workflows` | CI, application deployment, and infrastructure planning |
 
 ## Reliability and Security
 
-- PostgreSQL uniqueness constraints prevent duplicate logical snapshots and metrics.
-- `pipeline_runs` records stage, status, attempt count, counts, and failure details for each collection run.
-- A repeated successful `run_id` returns its stored result instead of duplicating writes.
+- PostgreSQL constraints prevent duplicate logical snapshots and metrics.
+- Stable `run_id` values make collection retries idempotent.
+- `pipeline_runs` records stage, status, attempt count, result counts, and failures.
 - A PostgreSQL advisory lock prevents overlapping collectors.
-- Alembic owns schema changes; application startup does not create or mutate tables.
-- The public API contains read-only endpoints, and `/api/run-once` is not exposed.
-- FastAPI CORS is restricted to the deployed frontend origin and local development origins.
-- Cloud Run scaling is capped to reduce cost and database connection pressure.
-- GitHub-to-GCP access uses Workload Identity Federation rather than a service-account JSON key.
-- Terraform precisely ignores the workload image, API revision name, and deployment-client metadata owned by CD without hiding runtime-configuration or infrastructure drift.
-
-## AI Evidence Records
-
-Gemini is an optional analysis stage rather than a chatbot interface. For each generated brief, Sonar can retain:
-
-- `documents`: Hacker News and external-news evidence
-- `brief_evidence`: evidence attached to a model run
-- `ai_runs`: provider, model, prompt, raw response, parsed JSON, status, and error
-- `explanations`: normalized brief content consumed by the UI
-
-This keeps generated conclusions traceable to both the source material and the exact model execution.
+- Alembic owns schema changes; application startup does not mutate tables.
+- The public API is read-only and does not expose a collection trigger.
+- CORS is restricted to the deployed dashboard and local development origins.
+- Secrets are stored in Secret Manager rather than source code or container images.
+- GitHub authenticates to GCP through Workload Identity Federation without a service-account key file.
+- Application images are pinned by digest and shared by the API, collector, and migration job.
+- Cloud Run scaling is capped to limit cost and database connection pressure.
 
 ## Run Locally
 
@@ -95,16 +105,19 @@ docker compose up -d --wait postgres
 docker compose exec postgres createdb -U sonar sonar_test
 ```
 
-Create the Python environment and local configuration:
+Create the Python environment:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 cp .env.example .env
 ```
 
-Set `DATABASE_URL` and `TEST_DATABASE_URL` in `.env`, then load them and apply the schema:
+Set `POSTGRES_PASSWORD`, `DATABASE_URL`, and `TEST_DATABASE_URL` in the untracked `.env` file. Add `GEMINI_API_KEY` and `NEWSAPI_KEY` only when those enrichments are required.
+
+Load the environment and apply the database schema:
 
 ```bash
 set -a
@@ -113,14 +126,14 @@ set +a
 alembic upgrade head
 ```
 
-Run one collection cycle and start the API:
+Run one collection cycle and start FastAPI:
 
 ```bash
 python -m sonar.worker --once
 uvicorn sonar.api.main:app --host 127.0.0.1 --port 8060
 ```
 
-In another terminal, start the frontend:
+In another terminal, start the dashboard:
 
 ```bash
 cd frontend
@@ -128,11 +141,11 @@ npm install
 NEXT_PUBLIC_SONAR_API_BASE=http://127.0.0.1:8060 npm run dev
 ```
 
-Open `http://127.0.0.1:5173`. If no API base is configured, the frontend intentionally falls back to its curated snapshot.
+Open `http://127.0.0.1:5173`.
 
 ### Docker Compose
 
-The same components can run as containers:
+The local stack can also run as containers:
 
 ```bash
 docker compose up -d --wait postgres
@@ -141,10 +154,10 @@ docker compose up --build api frontend
 docker compose run --rm worker
 ```
 
-Local ports:
+Local services:
 
 - API: `http://127.0.0.1:8060`
-- frontend: `http://127.0.0.1:5173`
+- dashboard: `http://127.0.0.1:5173`
 - PostgreSQL: `127.0.0.1:5432`
 
 ## API
@@ -168,24 +181,23 @@ Example:
 curl -fsS https://sonar-api-4akcp3ehqa-ts.a.run.app/api/status
 ```
 
-## Tests and Validation
+## Tests
 
-Run backend tests against the dedicated PostgreSQL test database:
+Backend validation uses a dedicated PostgreSQL database:
 
 ```bash
-python -m pip install -r requirements-dev.txt
 python -m ruff check sonar tests alembic
 python -m pytest -q
 ```
 
-Build the frontend:
+Build the production frontend:
 
 ```bash
 cd frontend
 npm run build
 ```
 
-Validate both Terraform roots:
+Validate the infrastructure definitions:
 
 ```bash
 terraform -chdir=terraform/bootstrap fmt -check
@@ -194,58 +206,25 @@ terraform -chdir=terraform/application fmt -check
 terraform -chdir=terraform/application validate
 ```
 
-## GCP Deployment
+## Deployment
 
-Infrastructure is split deliberately:
+The infrastructure is divided into two Terraform roots:
 
-- [`terraform/bootstrap`](terraform/bootstrap/README.md) creates the remote-state bucket, Workload Identity Federation provider, and Terraform deployer identity needed before remote state can be used.
-- [`terraform/application`](terraform/application/README.md) creates application APIs, Artifact Registry, Cloud SQL, Secret Manager containers, least-privilege service accounts, Cloud Run workloads, and Cloud Scheduler.
-- [`docs/gcp-phase4-runbook.md`](docs/gcp-phase4-runbook.md) documents initialization, secret provisioning, image deployment, migrations, verification, and cleanup.
-- [`docs/phase5-github-actions.md`](docs/phase5-github-actions.md) documents CI/CD ownership, WIF, workflow sequencing, GitHub Environment setup, and Sites cutover.
-- [`docs/application-rollback.md`](docs/application-rollback.md) records the tested application rollback boundary and commands.
-- [`docs/cost-and-cleanup.md`](docs/cost-and-cleanup.md) explains normal cost controls, pausing collection, and destructive-cleanup safeguards.
+- [`terraform/bootstrap`](terraform/bootstrap/README.md) creates remote state, the Terraform deployer identity, and GitHub Workload Identity Federation.
+- [`terraform/application`](terraform/application/README.md) manages Cloud SQL, Secret Manager containers, Artifact Registry, service accounts, Cloud Run workloads, and Cloud Scheduler.
 
-Real secret values, local `terraform.tfvars`, state files, and saved plans are excluded from Git. The monthly GCP budget alert is managed manually in the Cloud Console; it is not a hard spending cap.
+Pull requests run Python linting and PostgreSQL tests, Alembic validation, the frontend production build, a production container build, and Terraform validation. After successful checks are merged into `main`, the deployment workflow builds one immutable image, runs migrations, updates the collector, deploys a new API revision, routes production traffic to it, and verifies readiness.
 
-## Phase 5 Acceptance Status
+Operational references:
 
-The repository now contains:
+- [`docs/application-rollback.md`](docs/application-rollback.md)
+- [`docs/cost-and-cleanup.md`](docs/cost-and-cleanup.md)
 
-1. PR and `main` CI for Ruff, PostgreSQL tests, Alembic validation, frontend build, container build, and Terraform validation.
-2. A post-CI deployment workflow that authenticates through WIF, builds one immutable image, runs migrations, updates the collector, deploys the API, verifies readiness, and records rollback inputs.
-3. A separate manually triggered Terraform workflow using the Terraform deployer identity and GCS remote state.
-4. GitHub setup, application rollback, Sites cutover, and cost/cleanup runbooks.
+Sensitive values, local environment files, Terraform variable files, state files, and saved plans are excluded from Git.
 
-Manual acceptance remains: configure the `production` and `infrastructure` GitHub Environments, exercise the workflows from GitHub, diagnose one real workflow failure, verify a rollback and redeploy, set the Sites production API variable, and publish the live-data frontend. Phase 5 is complete only after those checks pass.
+## Current Scope
 
-## Project Layout
-
-```text
-Sonar/
-  alembic/                 # versioned PostgreSQL migrations
-  docs/                    # cloud deployment and operations runbooks
-  frontend/                # React/Next.js dashboard
-  sonar/
-    ai/                    # Gemini integration and evidence briefs
-    api/                   # read-only FastAPI service
-    ingestion/             # Hacker News and NewsAPI clients
-    processing/            # metrics and anomaly detection
-    services/               # collection and pipeline orchestration
-    db.py                   # SQLAlchemy PostgreSQL adapter
-    worker.py               # collector entrypoint
-  terraform/
-    bootstrap/             # remote state and deployment identity
-    application/           # GCP application infrastructure
-  tests/                   # API, database, AI, and pipeline tests
-  docker-compose.yml       # local PostgreSQL and application services
-  Dockerfile.api           # shared production image
-```
-
-## Current Limitations
-
-- The public Sites build still displays snapshot data until the Phase 5 frontend cutover.
-- Phase 5 workflows are not accepted until their first real GitHub runs and rollback exercise succeed.
-- The deployment is single-region, zonal, and intentionally sized for a low-traffic system.
-- The API has no end-user authentication or rate-limiting layer; only read-only routes are public.
-- NewsAPI and Gemini behavior depends on provider availability, quota, and configured credentials.
-- Budget alerts notify; they do not automatically stop GCP resources or spending.
+- The deployment is single-region and intentionally sized for a low-traffic public project.
+- The API has no end-user authentication or dedicated rate-limiting layer; only read-only routes are public.
+- AI and external-news enrichment depend on provider availability and quota.
+- The GCP budget alert sends notifications but is not a hard spending cap.
