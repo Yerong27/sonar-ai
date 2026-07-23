@@ -67,7 +67,7 @@ The API, collector, and migration job use separate service accounts. Runtime sec
 - FastAPI CORS is restricted to the deployed frontend origin and local development origins.
 - Cloud Run scaling is capped to reduce cost and database connection pressure.
 - GitHub-to-GCP access uses Workload Identity Federation rather than a service-account JSON key.
-- Terraform ignores only the workload image field, allowing deployments to update images without hiding unrelated infrastructure drift.
+- Terraform precisely ignores the workload image, API revision name, and deployment-client metadata owned by CD without hiding runtime-configuration or infrastructure drift.
 
 ## AI Evidence Records
 

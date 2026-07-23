@@ -12,4 +12,4 @@ Deployment is intentionally two-stage:
 
 The first workload apply keeps Cloud Scheduler paused. After migrations and one manual collector execution succeed, set `scheduler_paused = false`, review the one-resource plan, and apply it to begin the six-hour schedule.
 
-Terraform never owns secret versions. The database password and API keys must not appear in `.tfvars`, plans, state, Git, or chat. The image lifecycle ignores only the container image field because Phase 5 will deploy new image revisions; all other resource drift remains visible.
+Terraform never owns secret versions. The database password and API keys must not appear in `.tfvars`, plans, state, Git, or chat. The lifecycle ignores only the image, API revision name, and deployment-client metadata written by the Phase 5 application workflow; all runtime configuration and infrastructure drift remains visible.
