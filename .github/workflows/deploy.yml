@@ -1,0 +1,190 @@
+name: Deploy application
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-application
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT_ID: sonar-ai-prod
+  GCP_REGION: australia-southeast1
+  WIF_PROVIDER: projects/476810083673/locations/global/workloadIdentityPools/github-actions/providers/github
+  DEPLOYER_SERVICE_ACCOUNT: sonar-application-deployer@sonar-ai-prod.iam.gserviceaccount.com
+  IMAGE_REPOSITORY: australia-southeast1-docker.pkg.dev/sonar-ai-prod/sonar/sonar-api
+  MIGRATION_JOB: sonar-migration
+  COLLECTOR_JOB: sonar-collector
+  API_SERVICE: sonar-api
+
+jobs:
+  deploy:
+    name: Migrate and deploy one verified image
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Check out the exact tested commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Authenticate to Google Cloud through WIF
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Authenticate Docker to Artifact Registry
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push the tested commit
+        id: image
+        env:
+          COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          IMAGE_TAG="${IMAGE_REPOSITORY}:sha-${COMMIT_SHA}"
+          docker build --file Dockerfile.api --tag "${IMAGE_TAG}" .
+          docker push "${IMAGE_TAG}"
+
+          DIGEST="$(
+            gcloud artifacts docker images describe "${IMAGE_TAG}" \
+              --project="${GCP_PROJECT_ID}" \
+              --format='value(image_summary.digest)'
+          )"
+          if [[ ! "${DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Artifact Registry did not return a valid sha256 digest" >&2
+            exit 1
+          fi
+
+          FULL_IMAGE="${IMAGE_REPOSITORY}@${DIGEST}"
+          {
+            echo "uri=${FULL_IMAGE}"
+            echo "digest=${DIGEST}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Record the currently deployed application
+        id: previous
+        run: |
+          set -euo pipefail
+          PREVIOUS_API_REVISION="$(
+            gcloud run services describe "${API_SERVICE}" \
+              --project="${GCP_PROJECT_ID}" \
+              --region="${GCP_REGION}" \
+              --format='value(status.latestReadyRevisionName)'
+          )"
+          PREVIOUS_API_IMAGE="$(
+            gcloud run revisions describe "${PREVIOUS_API_REVISION}" \
+              --project="${GCP_PROJECT_ID}" \
+              --region="${GCP_REGION}" \
+              --format=json \
+              | jq -r '[.. | objects | .image? // empty][0]'
+          )"
+          PREVIOUS_COLLECTOR_IMAGE="$(
+            gcloud run jobs describe "${COLLECTOR_JOB}" \
+              --project="${GCP_PROJECT_ID}" \
+              --region="${GCP_REGION}" \
+              --format=json \
+              | jq -r '[.. | objects | .image? // empty][0]'
+          )"
+
+          test -n "${PREVIOUS_API_REVISION}"
+          test -n "${PREVIOUS_API_IMAGE}"
+          test -n "${PREVIOUS_COLLECTOR_IMAGE}"
+
+          {
+            echo "api_revision=${PREVIOUS_API_REVISION}"
+            echo "api_image=${PREVIOUS_API_IMAGE}"
+            echo "collector_image=${PREVIOUS_COLLECTOR_IMAGE}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Update and execute database migrations
+        run: |
+          set -euo pipefail
+          gcloud run jobs update "${MIGRATION_JOB}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --image="${{ steps.image.outputs.uri }}" \
+            --quiet
+          gcloud run jobs execute "${MIGRATION_JOB}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --wait
+
+      - name: Update collector image
+        run: |
+          gcloud run jobs update "${COLLECTOR_JOB}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --image="${{ steps.image.outputs.uri }}" \
+            --quiet
+
+      - name: Deploy API revision
+        id: api
+        env:
+          COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          REVISION_SUFFIX="git-${COMMIT_SHA:0:7}-${GITHUB_RUN_ATTEMPT}"
+          gcloud run services update "${API_SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --image="${{ steps.image.outputs.uri }}" \
+            --revision-suffix="${REVISION_SUFFIX}" \
+            --quiet
+
+          API_URL="$(
+            gcloud run services describe "${API_SERVICE}" \
+              --project="${GCP_PROJECT_ID}" \
+              --region="${GCP_REGION}" \
+              --format='value(status.url)'
+          )"
+          echo "url=${API_URL}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify API readiness
+        run: |
+          curl --fail --silent --show-error \
+            --retry 12 --retry-delay 5 --retry-all-errors \
+            "${{ steps.api.outputs.url }}/health/ready"
+
+      - name: Record deployment and rollback inputs
+        env:
+          COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          NEW_API_REVISION="$(
+            gcloud run services describe "${API_SERVICE}" \
+              --project="${GCP_PROJECT_ID}" \
+              --region="${GCP_REGION}" \
+              --format='value(status.latestReadyRevisionName)'
+          )"
+          {
+            echo "## Sonar deployment"
+            echo
+            echo "- Commit: \`${COMMIT_SHA}\`"
+            echo "- Image: \`${{ steps.image.outputs.uri }}\`"
+            echo "- API revision: \`${NEW_API_REVISION}\`"
+            echo "- API URL: ${{ steps.api.outputs.url }}"
+            echo "- Previous API revision: \`${{ steps.previous.outputs.api_revision }}\`"
+            echo "- Previous API image: \`${{ steps.previous.outputs.api_image }}\`"
+            echo "- Previous collector image: \`${{ steps.previous.outputs.collector_image }}\`"
+            echo
+            echo "Database migrations are not rolled back automatically."
+          } >> "${GITHUB_STEP_SUMMARY}"
