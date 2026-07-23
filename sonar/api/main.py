@@ -81,6 +81,32 @@ def _display_keyword(keyword: str) -> str:
     return keyword.upper() if len(keyword) <= 3 else keyword.title()
 
 
+def _string_list(value: Any, *, limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for item in value:
+        text_value = str(item or "").strip()
+        if text_value and text_value not in items:
+            items.append(text_value)
+        if len(items) >= limit:
+            break
+    return items
+
+
+def _monitoring_sentiment(payload: dict[str, Any]) -> dict[str, float]:
+    raw = payload.get("sentiment_distribution")
+    if not isinstance(raw, dict):
+        return {}
+    distribution: dict[str, float] = {}
+    for label in ("positive", "negative", "neutral", "mixed"):
+        try:
+            distribution[label] = max(0.0, float(raw.get(label, 0)))
+        except (TypeError, ValueError):
+            distribution[label] = 0.0
+    return distribution if any(distribution.values()) else {}
+
+
 def _keyword_tokens(keyword: str) -> list[str]:
     tokens = re.findall(r"[a-z0-9]+", str(keyword or "").lower())
     short_whitelist = {"ai", "llm", "ml", "ui", "ux", "hn", "gpu", "api"}
@@ -496,12 +522,69 @@ def create_app(
                     """
                 )
             ).mappings().all()
+            monitoring_row = conn.execute(
+                text(
+                    """
+                SELECT source_scope, response_json, story_count, created_at
+                FROM monitoring_summaries
+                ORDER BY created_at DESC
+                LIMIT 1
+                    """
+                )
+            ).mappings().first()
 
         briefs: list[dict[str, Any]] = []
         theme_counter: Counter[str] = Counter()
         sentiment_counter: Counter[str] = Counter()
         keyword_counter: Counter[str] = Counter()
         latest_brief = None
+
+        monitoring_payload = (
+            _json_loads(monitoring_row["response_json"], {}) if monitoring_row else {}
+        )
+        if not isinstance(monitoring_payload, dict):
+            monitoring_payload = {}
+        monitoring_topics = _string_list(monitoring_payload.get("top_topics"), limit=8)
+        dominant_theme = str(monitoring_payload.get("dominant_theme") or "").strip()
+        if dominant_theme and dominant_theme not in monitoring_topics:
+            monitoring_topics.insert(0, dominant_theme)
+        monitoring_keywords = _string_list(
+            monitoring_payload.get("top_keywords") or monitoring_payload.get("keywords"),
+            limit=16,
+        )
+        monitoring_sentiment = _monitoring_sentiment(monitoring_payload)
+        dominant_sentiment = (
+            max(monitoring_sentiment, key=monitoring_sentiment.get)
+            if monitoring_sentiment
+            else ""
+        )
+        monitoring_summary = None
+        if monitoring_row and monitoring_payload:
+            monitoring_summary = {
+                "id": f"monitoring-{monitoring_row['created_at']}",
+                "created_at": monitoring_row["created_at"],
+                "headline_summary": str(
+                    monitoring_payload.get("headline_summary")
+                    or dominant_theme
+                    or "Current Hacker News landscape"
+                ),
+                "topic": dominant_theme or (monitoring_topics[0] if monitoring_topics else "Landscape monitoring"),
+                "summary": str(monitoring_payload.get("summary") or ""),
+                "sentiment_label": dominant_sentiment,
+                "confidence": None,
+                "bullet_insights": _string_list(
+                    monitoring_payload.get("bullet_insights"), limit=3
+                ),
+                "evidence_count": int(monitoring_row["story_count"] or 0),
+                "provider": "gemini",
+                "model": settings.gemini_model,
+                "ai_status": "complete",
+                "summary_kind": "monitoring_summary",
+                "source_scope": monitoring_row["source_scope"],
+            }
+
+        for index, topic in enumerate(monitoring_topics):
+            theme_counter[topic] += max(1, len(monitoring_topics) - index)
 
         for row in brief_rows:
             payload = normalize_brief_payload(_json_loads(row["response_json"], {}))
@@ -544,14 +627,35 @@ def create_app(
                 latest_brief = brief
 
         story_pool = [_row_to_dict(row) for row in story_rows]
-        notable_stories = story_pool[:8]
+        notable_story_ids = _string_list(
+            monitoring_payload.get("notable_story_ids"), limit=8
+        )
+        stories_by_id = {str(story.get("story_id")): story for story in story_pool}
+        notable_stories = [
+            stories_by_id[story_id]
+            for story_id in notable_story_ids
+            if story_id in stories_by_id
+        ]
+        notable_ids = {str(story.get("story_id")) for story in notable_stories}
+        notable_stories.extend(
+            story
+            for story in story_pool
+            if str(story.get("story_id")) not in notable_ids
+        )
+        notable_stories = notable_stories[:8]
         for story in story_pool[:18]:
             score = int(story.get("score") or 0)
             comments = int(story.get("num_comments") or 0)
             for keyword in _keywords(str(story.get("title") or "")):
                 keyword_counter[keyword] += max(1, min(8, (score + comments) // 250 + 1))
 
-        raw_keywords = [keyword for keyword, _count in keyword_counter.most_common(24)]
+        raw_keywords = list(monitoring_keywords)
+        normalized_keywords = {keyword.casefold() for keyword in raw_keywords}
+        raw_keywords.extend(
+            keyword
+            for keyword, _count in keyword_counter.most_common(24)
+            if keyword.casefold() not in normalized_keywords
+        )
         keyword_signals = [
             signal for signal in _build_keyword_signals(raw_keywords, story_pool) if signal["story_count"] > 0
         ][:14]
@@ -580,12 +684,20 @@ def create_app(
             for index, signal in enumerate(keyword_signals)
         ]
         sentiment_distribution = [
-            {"label": label, "count": sentiment_counter.get(label, 0)}
+            {
+                "label": label,
+                "count": (
+                    monitoring_sentiment[label]
+                    if monitoring_sentiment
+                    else sentiment_counter.get(label, 0)
+                ),
+            }
             for label in ["positive", "negative", "neutral", "mixed"]
         ]
 
         return {
-            "latest_brief": latest_brief,
+            "latest_brief": latest_brief or monitoring_summary,
+            "monitoring_summary": monitoring_summary,
             "ranked_themes": ranked_themes,
             "heading_visibility": heading_visibility,
             "keyword_bubbles": keyword_bubbles,
