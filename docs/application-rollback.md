@@ -66,4 +66,4 @@ If the previous application image cannot operate with the current schema:
 
 After completing the rollback exercise, rerun the current application deployment from GitHub or route traffic to the verified current revision. Recheck readiness and confirm the collector image digest matches the current release.
 
-Finally run the manual Terraform `plan`. It may report deployment-client metadata, but it must not attempt to restore an older container image because image ownership belongs to the application workflow.
+Finally run the manual Terraform `plan`. It must not report deployment-client metadata, remove the API revision name, or attempt to restore an older container image because those attributes belong to the application workflow.

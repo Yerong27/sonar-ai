@@ -89,7 +89,12 @@ resource "google_cloud_run_v2_service" "api" {
   }
 
   lifecycle {
-    ignore_changes = [template[0].containers[0].image]
+    ignore_changes = [
+      client,
+      client_version,
+      template[0].revision,
+      template[0].containers[0].image,
+    ]
   }
 
   depends_on = [
@@ -188,7 +193,11 @@ resource "google_cloud_run_v2_job" "collector" {
   }
 
   lifecycle {
-    ignore_changes = [template[0].template[0].containers[0].image]
+    ignore_changes = [
+      client,
+      client_version,
+      template[0].template[0].containers[0].image,
+    ]
   }
 
   depends_on = [
@@ -257,7 +266,11 @@ resource "google_cloud_run_v2_job" "migration" {
   }
 
   lifecycle {
-    ignore_changes = [template[0].template[0].containers[0].image]
+    ignore_changes = [
+      client,
+      client_version,
+      template[0].template[0].containers[0].image,
+    ]
   }
 
   depends_on = [

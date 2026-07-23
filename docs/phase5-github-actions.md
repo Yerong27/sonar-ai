@@ -10,7 +10,7 @@ Phase 5 separates application delivery from infrastructure ownership. It uses Gi
 | `Deploy application` | successful `CI` run for a push to `main` | `sonar-application-deployer` | build/push one image, migrate, update collector, deploy and verify API |
 | `Terraform application infrastructure` | manual only | `sonar-terraform-deployer` | plan or apply application infrastructure using GCS remote state |
 
-Terraform owns Cloud Run configuration, identities, IAM, Cloud SQL, secrets, scaling, Scheduler, and other infrastructure. The application workflow owns only the shared container image and the resulting Cloud Run job/service revisions. Terraform therefore ignores only the three container image attributes and continues to report other drift.
+Terraform owns Cloud Run runtime configuration, identities, IAM, Cloud SQL, secrets, scaling, Scheduler, and other infrastructure. The application workflow owns the shared container image, API revision name, and deployment-client metadata. Terraform ignores only those exact attributes and continues to report other drift.
 
 ## One-time GitHub setup you must perform
 
