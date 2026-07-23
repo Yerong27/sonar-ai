@@ -40,7 +40,7 @@ The deployment uses one image identified by both the tested commit SHA and its i
 3. record the previous API revision/image and collector image;
 4. update and execute the migration job;
 5. only after migration succeeds, update the collector image;
-6. deploy a new API revision from the same digest;
+6. deploy a new API revision from the same digest and route 100% of service traffic to it;
 7. retry `/health/ready` until it succeeds or the workflow fails;
 8. write the new and previous deployment identifiers to the workflow summary.
 

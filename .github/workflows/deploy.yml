@@ -150,6 +150,13 @@ jobs:
             --revision-suffix="${REVISION_SUFFIX}" \
             --quiet
 
+          NEW_API_REVISION="${API_SERVICE}-${REVISION_SUFFIX}"
+          gcloud run services update-traffic "${API_SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --to-revisions="${NEW_API_REVISION}=100" \
+            --quiet
+
           API_URL="$(
             gcloud run services describe "${API_SERVICE}" \
               --project="${GCP_PROJECT_ID}" \
@@ -157,6 +164,7 @@ jobs:
               --format='value(status.url)'
           )"
           echo "url=${API_URL}" >> "${GITHUB_OUTPUT}"
+          echo "revision=${NEW_API_REVISION}" >> "${GITHUB_OUTPUT}"
 
       - name: Verify API readiness
         run: |
@@ -169,12 +177,7 @@ jobs:
           COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          NEW_API_REVISION="$(
-            gcloud run services describe "${API_SERVICE}" \
-              --project="${GCP_PROJECT_ID}" \
-              --region="${GCP_REGION}" \
-              --format='value(status.latestReadyRevisionName)'
-          )"
+          NEW_API_REVISION="${{ steps.api.outputs.revision }}"
           {
             echo "## Sonar deployment"
             echo
