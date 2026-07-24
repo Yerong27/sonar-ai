@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 from collections import Counter
 from typing import Any
@@ -213,6 +214,34 @@ def create_app(
         except SQLAlchemyError as exc:
             raise HTTPException(status_code=503, detail="Database unavailable") from exc
         return {"status": "ready"}
+
+    @api.get("/api/runtime")
+    def get_runtime() -> dict[str, Any]:
+        """Expose non-sensitive runtime facts for public deployment verification."""
+        database: Database = api.state.database
+        try:
+            with database.connect() as conn:
+                conn.execute(text("SELECT 1")).scalar_one()
+        except SQLAlchemyError as exc:
+            raise HTTPException(status_code=503, detail="Database unavailable") from exc
+
+        service = os.getenv("K_SERVICE")
+        revision = os.getenv("K_REVISION")
+        configuration = os.getenv("K_CONFIGURATION")
+        cloud_run_verified = bool(service and revision and configuration)
+
+        return {
+            "status": "ready",
+            "cloud_run_verified": cloud_run_verified,
+            "platform": "Google Cloud Run" if cloud_run_verified else "Local development",
+            "service": service,
+            "revision": revision,
+            "configuration": configuration,
+            "database": {
+                "engine": database.engine.dialect.name,
+                "status": "connected",
+            },
+        }
 
     @api.get("/api/status")
     def get_status() -> dict[str, Any]:

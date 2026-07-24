@@ -10,8 +10,22 @@ The project includes a live dashboard, a read-only FastAPI service, a scheduled 
 | --- | --- |
 | Dashboard | [Sonar AI Radar](https://sonar-ai-radar.liyerongvv.chatgpt.site) |
 | API status | [FastAPI status](https://sonar-api-4akcp3ehqa-ts.a.run.app/api/status) |
+| GCP runtime verification | [Live Cloud Run record](https://sonar-api-4akcp3ehqa-ts.a.run.app/api/runtime) |
 
 The public dashboard reads live data from the production API. If the API is unavailable, the frontend can fall back to a curated demonstration snapshot rather than rendering a broken page.
+
+### Verify the GCP deployment
+
+Open **Live infrastructure verification** at the bottom of the dashboard, then select **Open live runtime record**. The record exposes only non-sensitive values that Cloud Run injects into the running container: `K_SERVICE`, `K_REVISION`, and `K_CONFIGURATION`. A genuine production response reports the active `sonar-api` service and its current immutable revision, together with the live PostgreSQL connectivity check.
+
+The linked API uses Google's assigned `run.app` domain. Its HTTP response also includes Google-managed headers such as `server: Google Frontend` and `x-cloud-trace-context`; these can be inspected in the browser Network panel or with:
+
+```bash
+curl -sS -D - -o /dev/null \
+  https://sonar-api-4akcp3ehqa-ts.a.run.app/api/runtime
+```
+
+No Secret Manager values, database credentials, connection addresses, or private infrastructure identifiers are returned by this endpoint.
 
 ## What Sonar Does
 
@@ -165,6 +179,7 @@ Local services:
 ```text
 GET /health/live
 GET /health/ready
+GET /api/runtime
 GET /api/status
 GET /api/stories
 GET /api/anomalies

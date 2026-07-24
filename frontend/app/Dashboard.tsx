@@ -13,6 +13,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Server,
   Wifi,
 } from "lucide-react";
 import {
@@ -38,6 +39,7 @@ type DashboardData = {
   intelligence: Row;
   stories: Row[];
   anomalies: Row[];
+  runtime: Row | null;
   mode: "live" | "demo";
 };
 
@@ -214,6 +216,7 @@ function makeDemoData(): DashboardData {
     },
     stories: demoStories,
     anomalies: demoAnomalies,
+    runtime: null,
     mode: "demo",
   };
 }
@@ -268,12 +271,13 @@ async function fetchJson(path: string) {
 
 async function loadDashboard(): Promise<DashboardData> {
   if (!apiBase()) return makeDemoData();
-  const [overview, metrics, intelligence, stories, anomalies] = await Promise.all([
+  const [overview, metrics, intelligence, stories, anomalies, runtime] = await Promise.all([
     fetchJson("/api/dashboard/overview"),
     fetchJson("/api/metrics/timeline?limit=160"),
     fetchJson("/api/ai/intelligence"),
     fetchJson("/api/stories?limit=80"),
     fetchJson("/api/anomalies?limit=40"),
+    fetchJson("/api/runtime").catch(() => null),
   ]);
   return {
     overview,
@@ -281,6 +285,7 @@ async function loadDashboard(): Promise<DashboardData> {
     intelligence,
     stories: stories.stories || [],
     anomalies: anomalies.anomalies || [],
+    runtime,
     mode: "live",
   };
 }
@@ -460,6 +465,7 @@ export default function Dashboard() {
   }
 
   const status = data.overview.status || {};
+  const runtime = data.runtime;
   const counts = status.counts || {};
   const intelligence = data.intelligence || {};
   const latestBrief = intelligence.latest_brief || data.overview.latest_brief;
@@ -1000,9 +1006,27 @@ export default function Dashboard() {
       </section>
       )}
 
+      <aside className="runtime-verification" aria-label="Live infrastructure verification">
+        <div className="runtime-verification-heading">
+          <Server size={17} />
+          <span>
+            <small>Live infrastructure verification</small>
+            <b>{runtime?.cloud_run_verified ? "Running on Google Cloud Run" : "Runtime verification unavailable"}</b>
+          </span>
+        </div>
+        <dl>
+          <div><dt>Service</dt><dd>{runtime?.service || "—"}</dd></div>
+          <div><dt>Revision</dt><dd>{runtime?.revision || "—"}</dd></div>
+          <div><dt>Database</dt><dd>{runtime?.database?.status === "connected" ? "PostgreSQL connected" : "—"}</dd></div>
+        </dl>
+        <a href={`${apiBase()}/api/runtime`} target="_blank" rel="noreferrer">
+          Open live runtime record <ExternalLink size={14} />
+        </a>
+      </aside>
+
       <footer>
         <span><Activity size={14} /> Sonar AI</span>
-        <p>Technology signal monitoring · FastAPI + React + PostgreSQL + Gemini</p>
+        <p>Sites dashboard · Cloud Run API · Cloud SQL PostgreSQL</p>
       </footer>
     </main>
   );

@@ -214,6 +214,43 @@ def test_health_endpoints(database: Database) -> None:
     assert client.get("/health/ready").json() == {"status": "ready"}
 
 
+def test_runtime_reports_cloud_run_injected_identity(
+    database: Database,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("K_SERVICE", "sonar-api")
+    monkeypatch.setenv("K_REVISION", "sonar-api-git-abc1234-1")
+    monkeypatch.setenv("K_CONFIGURATION", "sonar-api")
+    client, _ = make_client(database)
+
+    response = client.get("/api/runtime")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ready",
+        "cloud_run_verified": True,
+        "platform": "Google Cloud Run",
+        "service": "sonar-api",
+        "revision": "sonar-api-git-abc1234-1",
+        "configuration": "sonar-api",
+        "database": {"engine": "postgresql", "status": "connected"},
+    }
+
+
+def test_runtime_does_not_claim_cloud_run_locally(database: Database, monkeypatch) -> None:
+    monkeypatch.delenv("K_SERVICE", raising=False)
+    monkeypatch.delenv("K_REVISION", raising=False)
+    monkeypatch.delenv("K_CONFIGURATION", raising=False)
+    client, _ = make_client(database)
+
+    body = client.get("/api/runtime").json()
+
+    assert body["cloud_run_verified"] is False
+    assert body["platform"] == "Local development"
+    assert body["service"] is None
+    assert body["revision"] is None
+
+
 def test_production_frontend_origin_is_allowed(database: Database) -> None:
     client, _ = make_client(database)
 
