@@ -4,28 +4,15 @@ Sonar AI is a Hacker News signal-monitoring and evidence-analysis system. It col
 
 The project includes a live dashboard, a read-only FastAPI service, a scheduled collection pipeline, PostgreSQL persistence, AI audit records, containerized workloads, and reproducible GCP infrastructure.
 
-## Live Application
+## Live Demo
 
-| Surface | URL |
-| --- | --- |
-| Dashboard | [Sonar AI Radar](https://sonar-ai-radar.liyerongvv.chatgpt.site) |
-| API status | [FastAPI status](https://sonar-api-4akcp3ehqa-ts.a.run.app/api/status) |
-| GCP runtime verification | [Live Cloud Run record](https://sonar-api-4akcp3ehqa-ts.a.run.app/api/runtime) |
+### **[Open the live Sonar AI Radar →](https://sonar-ai-radar.liyerongvv.chatgpt.site)**
 
-The public dashboard reads live data from the production API. If the API is unavailable, the frontend can fall back to a curated demonstration snapshot rather than rendering a broken page.
+Explore the production dashboard, including live Hacker News signals, AI-generated landscape analysis, interactive topic filtering, anomaly investigation, and story-level links.
 
-### Verify the GCP deployment
+Production API: [service status](https://sonar-api-4akcp3ehqa-ts.a.run.app/api/status) · [runtime metadata](https://sonar-api-4akcp3ehqa-ts.a.run.app/api/runtime)
 
-Open **Live infrastructure verification** at the bottom of the dashboard, then select **Open live runtime record**. The record exposes only non-sensitive values that Cloud Run injects into the running container: `K_SERVICE`, `K_REVISION`, and `K_CONFIGURATION`. A genuine production response reports the active `sonar-api` service and its current immutable revision, together with the live PostgreSQL connectivity check.
-
-The linked API uses Google's assigned `run.app` domain. Its HTTP response also includes Google-managed headers such as `server: Google Frontend` and `x-cloud-trace-context`; these can be inspected in the browser Network panel or with:
-
-```bash
-curl -sS -D - -o /dev/null \
-  https://sonar-api-4akcp3ehqa-ts.a.run.app/api/runtime
-```
-
-No Secret Manager values, database credentials, connection addresses, or private infrastructure identifiers are returned by this endpoint.
+The dashboard reads live data from the production API. If the API is unavailable, it can fall back to a curated demonstration snapshot rather than rendering a broken page.
 
 ## What Sonar Does
 
