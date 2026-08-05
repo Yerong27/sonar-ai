@@ -724,13 +724,12 @@ def create_app(
             for keyword in _keywords(str(story.get("title") or "")):
                 keyword_counter[keyword] += max(1, min(8, (score + comments) // 250 + 1))
 
-        raw_keywords = list(monitoring_keywords)
-        normalized_keywords = {keyword.casefold() for keyword in raw_keywords}
-        raw_keywords.extend(
-            keyword
-            for keyword, _count in keyword_counter.most_common(24)
-            if keyword.casefold() not in normalized_keywords
-        )
+        # Model-selected concepts are preferable to isolated title tokens. Only
+        # use the lexical fallback when no usable monitoring keywords exist;
+        # otherwise generic recurring words can crowd out the actual concepts.
+        raw_keywords = list(monitoring_keywords) or [
+            keyword for keyword, _count in keyword_counter.most_common(24)
+        ]
         minimum_keyword_coverage = 2 if len(story_pool) >= 8 else 1
         keyword_signals = [
             signal
