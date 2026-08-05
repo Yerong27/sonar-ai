@@ -17,16 +17,32 @@ from sonar.config import settings
 from sonar.db import Database, db
 
 STOP_WORDS = {
-    "about", "after", "again", "against", "also", "and", "are", "because", "before",
-    "being", "between", "could", "for", "from", "has", "have", "into", "its",
-    "more", "not", "over", "that", "the", "their", "there", "these", "they",
-    "this", "through", "under", "using", "was", "were", "with", "would", "you",
-    "your", "what", "when", "where", "which", "while", "will", "news",
-    "hacker", "story", "stories", "feed", "newstories", "topstories",
+    "about", "after", "again", "against", "all", "also", "and", "any", "are", "because",
+    "before", "being", "between", "can", "could", "did", "do", "does", "don", "during",
+    "first", "for", "from", "get", "gets", "go", "goes", "good", "got", "has", "have",
+    "how", "into", "its", "made", "make", "makes", "more", "not", "now", "one", "our",
+    "over", "own", "say", "says", "that", "the", "their", "there", "these", "they", "this",
+    "through", "today", "under", "using", "via", "was", "we", "were", "what", "when",
+    "where", "which", "while", "who", "why", "will", "with", "would", "you", "your", "news",
+    "ask", "hacker", "hn", "show", "story", "stories", "feed", "newstories", "topstories",
     "anomaly", "anomalies", "automatically", "average", "baseline", "brief", "briefs",
     "comments", "detected", "engagement", "generated", "increase", "internal",
     "label", "metric", "metrics", "monitoring", "score", "signal", "signals",
-    "spike", "volume",
+    "spike", "volume", "new", "position",
+}
+
+KEYWORD_DISPLAY_NAMES = {
+    "ai": "AI",
+    "api": "API",
+    "apis": "APIs",
+    "deepseek": "DeepSeek",
+    "github": "GitHub",
+    "gpu": "GPU",
+    "gpus": "GPUs",
+    "llm": "LLM",
+    "llms": "LLMs",
+    "openai": "OpenAI",
+    "xbox": "Xbox",
 }
 
 
@@ -74,12 +90,45 @@ def _latest_timestamp(database: Database, table_name: str, column_name: str) -> 
 
 def _keywords(text: str) -> list[str]:
     words = re.findall(r"[A-Za-z][A-Za-z0-9+#.-]{1,}", text.lower())
-    return [word.strip(".-") for word in words if word not in STOP_WORDS and len(word) > 2]
+    cleaned = [word.strip(".-") for word in words]
+    return [word for word in cleaned if word not in STOP_WORDS and len(word) > 2]
 
 
 def _display_keyword(keyword: str) -> str:
     keyword = keyword.strip()
+    known_name = KEYWORD_DISPLAY_NAMES.get(keyword.casefold())
+    if known_name:
+        return known_name
+    if any(character.isupper() for character in keyword[1:]):
+        return keyword
     return keyword.upper() if len(keyword) <= 3 else keyword.title()
+
+
+def _keyword_candidates(value: Any, *, limit: int) -> list[str]:
+    """Keep only meaningful, unique noun-like keyword candidates from model output."""
+    if not isinstance(value, list):
+        return []
+
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        candidate = re.sub(r"\s+", " ", str(item or "").strip(" .,:;!?-_"))
+        tokens = re.findall(r"[A-Za-z][A-Za-z0-9+#.-]*", candidate.lower())
+        informative_tokens = [
+            token.strip(".-")
+            for token in tokens
+            if token.strip(".-") not in STOP_WORDS
+        ]
+        normalized = candidate.casefold()
+        if not candidate or not informative_tokens or normalized in seen:
+            continue
+        if len(tokens) > 3:
+            continue
+        seen.add(normalized)
+        candidates.append(candidate)
+        if len(candidates) >= limit:
+            break
+    return candidates
 
 
 def _string_list(value: Any, *, limit: int) -> list[str]:
@@ -534,18 +583,15 @@ def create_app(
             story_rows = conn.execute(
                 text(
                     """
-                WITH latest_snapshot AS (
-                    SELECT story_id, source_feed, MAX(collected_at) AS collected_at
+                WITH current_window AS (
+                    SELECT MAX(collected_at) AS collected_at
                     FROM hn_story_snapshots
-                    GROUP BY story_id, source_feed
                 )
                 SELECT s.story_id, s.source_feed, s.title, s.score, s.num_comments,
                        s.permalink, s.url, s.collected_at
                 FROM hn_story_snapshots s
-                JOIN latest_snapshot latest
-                  ON latest.story_id = s.story_id
-                 AND latest.source_feed = s.source_feed
-                 AND latest.collected_at = s.collected_at
+                JOIN current_window current
+                  ON current.collected_at = s.collected_at
                 ORDER BY s.score DESC, s.num_comments DESC
                 LIMIT 80
                     """
@@ -577,7 +623,7 @@ def create_app(
         dominant_theme = str(monitoring_payload.get("dominant_theme") or "").strip()
         if dominant_theme and dominant_theme not in monitoring_topics:
             monitoring_topics.insert(0, dominant_theme)
-        monitoring_keywords = _string_list(
+        monitoring_keywords = _keyword_candidates(
             monitoring_payload.get("top_keywords") or monitoring_payload.get("keywords"),
             limit=16,
         )
@@ -619,7 +665,7 @@ def create_app(
             payload = normalize_brief_payload(_json_loads(row["response_json"], {}))
             topic = str(payload.get("topic") or row["metric_name"] or "").strip()
             sentiment = str(payload.get("sentiment_label") or "neutral").strip().lower()
-            if topic:
+            if topic and not monitoring_topics:
                 theme_counter[topic] += 3
                 keyword_counter.update(_keywords(topic))
             sentiment_counter[sentiment or "neutral"] += 1
@@ -685,9 +731,17 @@ def create_app(
             for keyword, _count in keyword_counter.most_common(24)
             if keyword.casefold() not in normalized_keywords
         )
+        minimum_keyword_coverage = 2 if len(story_pool) >= 8 else 1
         keyword_signals = [
-            signal for signal in _build_keyword_signals(raw_keywords, story_pool) if signal["story_count"] > 0
-        ][:14]
+            signal
+            for signal in _build_keyword_signals(raw_keywords, story_pool)
+            if signal["story_count"] >= minimum_keyword_coverage
+        ]
+        keyword_signals.sort(
+            key=lambda signal: (signal["story_count"], signal["visibility"]),
+            reverse=True,
+        )
+        keyword_signals = keyword_signals[:14]
 
         ranked_themes = [
             {"theme": theme, "rank": index + 1, "score": score}

@@ -67,7 +67,13 @@ You are a monitoring system analyst summarizing the current Hacker News landscap
 
 CRITICAL INSTRUCTIONS:
 - headline_summary must read like a monitoring brief title (max 12 words). NOT an essay introduction.
+- top_topics must be 3–5 stable conceptual themes supported by multiple supplied stories.
 - top_topics must be concise labels (2–4 words each, e.g. "AI Model Releases", "Cloud Pricing").
+- Never use Hacker News mechanics, monitoring metrics, or generic labels as topics (for example "Show HN", "Engagement Spike", or "Hacker News").
+- top_keywords must be recurring concepts supported by at least 2 supplied stories.
+- top_keywords must be meaningful nouns or noun phrases (1–3 words), not verbs, prepositions, pronouns, or title fragments.
+- Exclude generic words such as "show", "ask", "during", "our", "new", and "position".
+- Exclude company or product names unless the same entity is materially discussed in at least 2 supplied stories.
 - bullet_insights must each be a single sentence with a maximum of 18 words.
 - dominant_theme must be 3–5 words.
 - summary must be 2 short sentences with a maximum of 45 words total.
@@ -77,7 +83,7 @@ CRITICAL INSTRUCTIONS:
 Required JSON schema:
 {{
   "headline_summary": "string — a concise monitoring brief headline, max 12 words",
-  "top_keywords": ["string — max 8"],
+  "top_keywords": ["string — max 8 recurring concepts, each supported by 2+ stories"],
   "top_topics": ["string — max 5, each 2–4 words"],
   "dominant_theme": "string — the single most prominent theme in 3–5 words",
   "sentiment_distribution": {{

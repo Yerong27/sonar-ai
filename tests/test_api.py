@@ -352,7 +352,7 @@ def test_ai_intelligence_uses_monitoring_summary_without_anomalies(
                 "response_json": json.dumps(
                     {
                         "headline_summary": "Open AI infrastructure leads Hacker News",
-                        "top_keywords": ["AI", "Open Source"],
+                        "top_keywords": ["during", "Show", "AI", "Open Source"],
                         "top_topics": ["AI Infrastructure", "Developer Tools"],
                         "dominant_theme": "AI Infrastructure",
                         "sentiment_distribution": {
@@ -382,7 +382,13 @@ def test_ai_intelligence_uses_monitoring_summary_without_anomalies(
         "label": "positive",
         "count": 0.5,
     }
-    assert intelligence["keyword_bubbles"][0]["keyword"] == "AI"
+    assert {item["keyword"] for item in intelligence["keyword_bubbles"]} >= {
+        "AI",
+        "Open Source",
+    }
+    assert {item["raw_keyword"].casefold() for item in intelligence["keyword_bubbles"]}.isdisjoint(
+        {"during", "show"}
+    )
     assert intelligence["notable_stories"][0]["story_id"] == "monitor-1"
     assert intelligence["event_briefs"] == []
 

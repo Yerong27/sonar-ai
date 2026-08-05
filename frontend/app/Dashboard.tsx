@@ -810,12 +810,12 @@ export default function Dashboard() {
               </div>
             )}
           </Panel>
-          <Panel title="Heading visibility" className="visibility-panel">
+          <Panel title="Keyword visibility" className="visibility-panel">
             <ResponsiveContainer width="100%" height={210}>
               <BarChart data={(intelligence.heading_visibility || []).slice(0, 6)} layout="vertical" margin={{ left: 6, right: 18 }}>
                 <CartesianGrid stroke="rgba(112,151,204,.10)" horizontal={false} />
                 <XAxis type="number" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="keyword" width={92} tick={{ fill: "#c3d2e3", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="keyword" width={108} tick={{ fill: "#c3d2e3", fontSize: 12 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Bar dataKey="visibility" name="Visibility" fill={COLORS.cyan} radius={[0, 3, 3, 0]} />
               </BarChart>
