@@ -28,7 +28,7 @@ STOP_WORDS = {
     "anomaly", "anomalies", "automatically", "average", "baseline", "brief", "briefs",
     "comments", "detected", "engagement", "generated", "increase", "internal",
     "label", "metric", "metrics", "monitoring", "score", "signal", "signals",
-    "spike", "volume", "new", "position",
+    "spike", "volume", "new", "position", "use", "used", "uses", "app", "apps",
 }
 
 KEYWORD_DISPLAY_NAMES = {
