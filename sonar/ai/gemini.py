@@ -70,10 +70,12 @@ CRITICAL INSTRUCTIONS:
 - top_topics must be 3–5 stable conceptual themes supported by multiple supplied stories.
 - top_topics must be concise labels (2–4 words each, e.g. "AI Model Releases", "Cloud Pricing").
 - Topics must describe the subject matter, never the feed mechanics, monitoring process, or engagement measurements.
-- keyword_signals must contain concrete entities, technologies, systems, protocols, or technical subject-matter noun phrases.
+- Return 6–12 keyword_signals when the supplied stories contain that many distinct, meaningful concepts.
+- keyword_signals must contain concrete entities, products, technologies, systems, protocols, or technical subject-matter noun phrases.
 - Do not return grammatical connectors, actions, qualities, or fragments of a title as concepts.
-- Every keyword signal must identify at least 2 supplied stories where that concept is central, not merely mentioned.
-- supporting_story_ids must contain only IDs copied exactly from the supplied stories.
+- aliases must include only genuine alternative names, abbreviations, or spelling variants useful for matching other stories.
+- supporting_story_ids must identify supplied stories where the concept is central; one supplied story is sufficient for an emerging concept.
+- Never invent IDs or aliases.
 - bullet_insights must each be a single sentence with a maximum of 18 words.
 - dominant_theme must be 3–5 words.
 - summary must be 2 short sentences with a maximum of 45 words total.
@@ -86,7 +88,8 @@ Required JSON schema:
   "keyword_signals": [
     {{
       "concept": "string — a concrete 1–4 word concept",
-      "supporting_story_ids": ["string — at least 2 exact supplied story IDs"]
+      "aliases": ["string — genuine matching aliases only"],
+      "supporting_story_ids": ["string — exact supplied story IDs where central"]
     }}
   ],
   "top_topics": ["string — max 5, each 2–4 words"],

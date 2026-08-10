@@ -38,7 +38,7 @@ class Settings:
     anomaly_window: int = int(os.getenv("SONAR_ANOMALY_WINDOW", "6"))
     anomaly_zscore_threshold: float = float(os.getenv("SONAR_ZSCORE_THRESHOLD", "2.0"))
     monitoring_interval_seconds: int = int(os.getenv("SONAR_MONITORING_INTERVAL_SECONDS", "1800"))
-    monitoring_story_sample_size: int = int(os.getenv("SONAR_MONITORING_STORY_SAMPLE_SIZE", "8"))
+    monitoring_story_sample_size: int = int(os.getenv("SONAR_MONITORING_STORY_SAMPLE_SIZE", "40"))
     cors_origins: list[str] = field(
         default_factory=lambda: csv_env(
             "SONAR_CORS_ORIGINS",

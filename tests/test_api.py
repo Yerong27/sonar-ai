@@ -377,15 +377,18 @@ def test_ai_intelligence_uses_monitoring_summary_without_anomalies(
                         "keyword_signals": [
                             {
                                 "concept": "AI Infrastructure",
-                                "supporting_story_ids": ["monitor-1", "monitor-2"],
+                                "aliases": ["AI infrastructure"],
+                                "supporting_story_ids": ["monitor-1"],
                             },
                             {
                                 "concept": "Open Source",
-                                "supporting_story_ids": ["monitor-1", "monitor-2"],
+                                "aliases": ["open source"],
+                                "supporting_story_ids": [],
                             },
                             {
                                 "concept": "Unsupported concept",
-                                "supporting_story_ids": ["monitor-1"],
+                                "aliases": [],
+                                "supporting_story_ids": [],
                             },
                         ],
                         "top_topics": ["AI Infrastructure", "Developer Tools"],
@@ -421,7 +424,11 @@ def test_ai_intelligence_uses_monitoring_summary_without_anomalies(
         "AI Infrastructure",
         "Open Source",
     }
-    assert all(item["story_count"] == 2 for item in intelligence["keyword_bubbles"])
+    story_counts = {
+        item["keyword"]: item["story_count"]
+        for item in intelligence["keyword_bubbles"]
+    }
+    assert story_counts == {"AI Infrastructure": 2, "Open Source": 1}
     assert intelligence["notable_stories"][0]["story_id"] == "monitor-1"
     assert intelligence["event_briefs"] == []
 

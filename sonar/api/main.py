@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 from collections import Counter
 from typing import Any
 
@@ -91,32 +92,103 @@ def _keyword_engagement_weight(score: Any, num_comments: Any) -> float:
     return 1.0 + score_boost + comment_boost
 
 
-def _grounded_keyword_signals(
+def _model_keyword_candidates(
+    monitoring_payload: dict[str, Any],
+    *,
+    limit: int = 16,
+) -> list[dict[str, Any]]:
+    """Read model-selected concepts without inventing title-frequency keywords."""
+    raw_signals = monitoring_payload.get("keyword_signals")
+    if not isinstance(raw_signals, list):
+        raw_signals = monitoring_payload.get("top_keywords")
+    if not isinstance(raw_signals, list):
+        return []
+
+    candidates: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in raw_signals:
+        if isinstance(item, dict):
+            concept = str(item.get("concept") or "")
+            aliases = _string_list(item.get("aliases"), limit=6)
+            supporting_ids = _string_list(item.get("supporting_story_ids"), limit=12)
+        else:
+            concept = str(item or "")
+            aliases = []
+            supporting_ids = []
+
+        concept = " ".join(concept.split()).strip(" .,:;!?-_")
+        normalized = concept.casefold()
+        words = re.findall(r"[A-Za-z0-9+#.-]+", concept)
+        if (
+            not concept
+            or normalized in seen
+            or len(concept) > 72
+            or not 1 <= len(words) <= 5
+        ):
+            continue
+
+        clean_aliases: list[str] = []
+        for alias in aliases:
+            cleaned = " ".join(alias.split()).strip(" .,:;!?-_")
+            if cleaned and cleaned.casefold() != normalized and len(cleaned) <= 72:
+                clean_aliases.append(cleaned)
+
+        seen.add(normalized)
+        candidates.append(
+            {
+                "concept": concept,
+                "aliases": clean_aliases,
+                "supporting_story_ids": supporting_ids,
+            }
+        )
+        if len(candidates) >= limit:
+            break
+    return candidates
+
+
+def _concept_match_strength(concept: str, aliases: list[str], title: str) -> float:
+    """Match a model concept to a title using phrases and model-provided aliases."""
+    title_text = " ".join(str(title or "").casefold().split())
+    title_tokens = set(re.findall(r"[a-z0-9+#.-]+", title_text))
+    best = 0.0
+    for term in [concept, *aliases]:
+        normalized = " ".join(str(term).casefold().split())
+        if not normalized:
+            continue
+        if re.search(rf"(?<![a-z0-9]){re.escape(normalized)}(?![a-z0-9])", title_text):
+            best = max(best, 1.0)
+            continue
+        tokens = set(re.findall(r"[a-z0-9+#.-]+", normalized))
+        if not tokens:
+            continue
+        overlap = len(tokens & title_tokens) / len(tokens)
+        required = 1.0 if len(tokens) <= 2 else 0.75
+        if overlap >= required:
+            best = max(best, 0.7 + (0.2 * overlap))
+    return best
+
+
+def _expanded_keyword_signals(
     monitoring_payload: dict[str, Any],
     stories: list[dict[str, Any]],
     *,
     limit: int = 14,
 ) -> list[dict[str, Any]]:
-    """Accept only model concepts with verifiable support from the current window."""
-    raw_signals = monitoring_payload.get("keyword_signals")
-    if not isinstance(raw_signals, list):
-        return []
-
-    stories_by_id = {str(story.get("story_id")): story for story in stories}
+    """Expand model-selected concepts across the complete current story window."""
     signals: list[dict[str, Any]] = []
-    seen_concepts: set[str] = set()
-    for raw_signal in raw_signals:
-        if not isinstance(raw_signal, dict):
-            continue
-        concept = " ".join(str(raw_signal.get("concept") or "").split()).strip(" .,:;!?-_")
-        normalized = concept.casefold()
-        if not concept or len(concept) > 64 or len(concept.split()) > 4 or normalized in seen_concepts:
-            continue
-
-        supporting_ids = _string_list(raw_signal.get("supporting_story_ids"), limit=12)
-        matched = [stories_by_id[story_id] for story_id in supporting_ids if story_id in stories_by_id]
-        unique_matched = {str(story.get("story_id")): story for story in matched}
-        if len(unique_matched) < 2:
+    for candidate in _model_keyword_candidates(monitoring_payload):
+        concept = candidate["concept"]
+        aliases = candidate["aliases"]
+        explicit_ids = set(candidate["supporting_story_ids"])
+        matched: dict[str, tuple[dict[str, Any], float]] = {}
+        for story in stories:
+            story_id = str(story.get("story_id"))
+            strength = _concept_match_strength(concept, aliases, str(story.get("title") or ""))
+            if story_id in explicit_ids:
+                strength = max(strength, 1.0)
+            if strength > 0:
+                matched[story_id] = (story, strength)
+        if not matched:
             continue
 
         evidence = [
@@ -129,32 +201,31 @@ def _grounded_keyword_signals(
                 "permalink": story.get("permalink"),
                 "url": story.get("url"),
                 "collected_at": story.get("collected_at"),
+                "relevance": round(strength, 2),
             }
-            for story in unique_matched.values()
+            for story, strength in matched.values()
         ]
         evidence.sort(key=lambda item: (item["score"], item["num_comments"]), reverse=True)
         visibility = sum(
             _keyword_engagement_weight(story["score"], story["num_comments"])
+            * float(story["relevance"])
             for story in evidence
         )
-        seen_concepts.add(normalized)
         signals.append(
             {
                 "keyword": concept,
                 "display_keyword": concept,
                 "visibility": round(visibility, 1),
-                "story_count": len(evidence),
+                "story_count": len(matched),
                 "stories": evidence[:8],
             }
         )
-        if len(signals) >= limit:
-            break
 
     signals.sort(
         key=lambda signal: (signal["story_count"], signal["visibility"]),
         reverse=True,
     )
-    return signals
+    return signals[:limit]
 
 
 def create_app(
@@ -629,7 +700,7 @@ def create_app(
             if str(story.get("story_id")) not in notable_ids
         )
         notable_stories = notable_stories[:8]
-        keyword_signals = _grounded_keyword_signals(monitoring_payload, story_pool)
+        keyword_signals = _expanded_keyword_signals(monitoring_payload, story_pool)
 
         ranked_themes = [
             {"theme": theme, "rank": index + 1, "score": score}

@@ -26,4 +26,5 @@ def test_monitoring_prompt_renders_keyword_signal_schema() -> None:
 
     assert result == {"keyword_signals": []}
     assert '"concept": "string' in explainer.model.prompt
+    assert '"aliases": [' in explainer.model.prompt
     assert '"supporting_story_ids": [' in explainer.model.prompt
