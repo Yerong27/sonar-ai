@@ -84,10 +84,10 @@ Required JSON schema:
 {{
   "headline_summary": "string — a concise monitoring brief headline, max 12 words",
   "keyword_signals": [
-    {
+    {{
       "concept": "string — a concrete 1–4 word concept",
       "supporting_story_ids": ["string — at least 2 exact supplied story IDs"]
-    }
+    }}
   ],
   "top_topics": ["string — max 5, each 2–4 words"],
   "dominant_theme": "string — the single most prominent theme in 3–5 words",
