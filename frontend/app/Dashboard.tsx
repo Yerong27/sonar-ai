@@ -336,7 +336,7 @@ function ChartTooltip({ active, payload, label }: Row) {
   );
 }
 
-function ConceptExplorer({
+function BubbleField({
   items,
   selectedKeyword,
   onSelectKeyword,
@@ -345,23 +345,25 @@ function ConceptExplorer({
   selectedKeyword: string | null;
   onSelectKeyword: (keyword: string | null) => void;
 }) {
+  const slots = [[50, 48], [23, 42], [78, 42], [30, 72], [69, 72], [15, 70], [85, 72]];
   const max = Math.max(...items.map((item) => Number(item.weight || 1)), 1);
   return (
-    <div className="concept-explorer" aria-label="Keyword explorer">
-      {items.slice(0, 8).map((item, index) => {
+    <div className="bubble-field" aria-label="Keyword explorer">
+      {items.slice(0, slots.length).map((item, index) => {
+        const size = 48 + (Number(item.weight || 1) / max) * 78;
         const isSelected = selectedKeyword === item.keyword;
-        const strength = Math.max(18, (Number(item.weight || 1) / max) * 100);
         return (
           <button
             type="button"
-            className={`concept-node${index === 0 ? " primary" : ""}${isSelected ? " selected" : ""}`}
+            className={`bubble-node${index === 0 ? " primary" : ""}${isSelected ? " selected" : ""}`}
             key={item.keyword}
+            style={{ left: `${slots[index][0]}%`, top: `${slots[index][1]}%`, width: size, height: size }}
             aria-label={`Filter notable stories by ${item.keyword}`}
             aria-pressed={isSelected}
             onClick={() => onSelectKeyword(isSelected ? null : item.keyword)}
           >
-            <span><b>{item.keyword}</b><small>{item.story_count || 0} stories</small></span>
-            <i><span style={{ width: `${strength}%` }} /></i>
+            <span>{item.keyword}</span>
+            <small>{item.story_count || 0}</small>
           </button>
         );
       })}
@@ -596,7 +598,7 @@ export default function Dashboard() {
 
       {activeView === "overview" && (
         <>
-          <section className="overview-primary-grid">
+          <section className="overview-board">
             <Panel title="Signal overview" className="signal-overview-panel">
                 <div className="overview-stats">
                   <span><small>Signals</small><b>{formatNumber(counts.stories || data.stories.length)}</b></span>
@@ -604,7 +606,7 @@ export default function Dashboard() {
                   <span><small>Emerging</small><b className="orange-value">{formatNumber(emergingTopics.length)}</b></span>
                   <span><small>Anomalies</small><b className="red-value">{formatNumber(anomalies.length)}</b></span>
                 </div>
-                <ResponsiveContainer width="100%" height={270}>
+                <ResponsiveContainer width="100%" height={220}>
                   <LineChart
                     data={metricData}
                     onClick={(state: Row) => {
@@ -637,8 +639,7 @@ export default function Dashboard() {
                 )}
             </Panel>
 
-            <div className="overview-side-stack">
-            <Panel title="System pulse" className="operations-status-panel">
+            <Panel title="Live status" className="operations-status-panel">
               <div className={alertCount ? "operations-alert active" : "operations-alert"}>
                 <AlertTriangle size={18} />
                 <span><b>{alertCount ? "Anomaly detected" : "Monitoring stable"}</b><small>{alertCount ? "High-confidence signal requires review" : "All monitored feeds are within range"}</small></span>
@@ -685,10 +686,7 @@ export default function Dashboard() {
                 )}
               </div>
             </Panel>
-            </div>
-          </section>
 
-          <section className="overview-secondary-grid">
             <Panel title="Signal velocity" className="velocity-panel">
               {scatterData.length ? (
                 <ResponsiveContainer width="100%" height="100%">
@@ -812,6 +810,17 @@ export default function Dashboard() {
               </div>
             )}
           </Panel>
+          <Panel title="Keyword visibility" className="visibility-panel">
+            <ResponsiveContainer width="100%" height={210}>
+              <BarChart data={(intelligence.heading_visibility || []).slice(0, 6)} layout="vertical" margin={{ left: 6, right: 18 }}>
+                <CartesianGrid stroke="rgba(112,151,204,.10)" horizontal={false} />
+                <XAxis type="number" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="keyword" width={108} tick={{ fill: "#c3d2e3", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="visibility" name="Visibility" fill={COLORS.cyan} radius={[0, 3, 3, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Panel>
           <Panel title="Signal sentiment" className="sentiment-panel">
             {hasSentiment ? (
               <ResponsiveContainer width="100%" height={210}>
@@ -834,41 +843,16 @@ export default function Dashboard() {
               </div>
             )}
           </Panel>
-          <Panel title="Concept signals" className="concept-panel">
-            {(intelligence.keyword_bubbles || []).length ? (
-              <div className="concept-workspace">
-                <div className="concept-summary">
-                  <span className="concept-kicker">Keyword visibility</span>
-                  <strong>{(intelligence.keyword_bubbles || []).length} repeated concepts</strong>
-                  <p>Ranked by title coverage and story engagement in the latest collection window.</p>
-                  <div className="concept-legend"><i /> stronger signal <span /> broader coverage</div>
-                </div>
-                <div>
-                  <div className="interactive-panel-heading">
-                    <span>Select a concept to filter notable stories</span>
-                    {selectedKeyword && <button type="button" onClick={() => setSelectedKeyword(null)}>Clear filter</button>}
-                  </div>
-                  <ConceptExplorer
-                    items={intelligence.keyword_bubbles || []}
-                    selectedKeyword={selectedKeyword}
-                    onSelectKeyword={setSelectedKeyword}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="concept-empty">
-                <div>
-                  <span className="concept-kicker">No repeated keyword passed the evidence threshold</span>
-                  <strong>The theme map is still available</strong>
-                  <p>Sonar keeps weak one-off words out of the chart instead of presenting them as trends.</p>
-                </div>
-                <div className="theme-cloud" aria-label="Current themes">
-                  {(intelligence.ranked_themes || []).slice(0, 5).map((item: Row) => (
-                    <span key={item.theme}>{item.theme}<small>#{item.rank}</small></span>
-                  ))}
-                </div>
-              </div>
-            )}
+          <Panel title="Keywords explorer" className="keyword-panel">
+            <div className="interactive-panel-heading">
+              <span>Click a topic to filter stories</span>
+              {selectedKeyword && <button type="button" onClick={() => setSelectedKeyword(null)}>Clear filter</button>}
+            </div>
+            <BubbleField
+              items={intelligence.keyword_bubbles || []}
+              selectedKeyword={selectedKeyword}
+              onSelectKeyword={setSelectedKeyword}
+            />
           </Panel>
           <Panel title="Notable stories" className="notable-panel">
             <div className="interactive-panel-heading">

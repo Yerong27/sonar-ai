@@ -308,7 +308,7 @@ def test_read_endpoints_return_seeded_data(database: Database) -> None:
     assert intelligence["latest_brief"]["headline_summary"] == "AI infrastructure story volume spiked"
     assert intelligence["ranked_themes"][0]["theme"] == "AI Infrastructure"
     assert intelligence["sentiment_distribution"][2]["label"] == "neutral"
-    assert intelligence["keyword_bubbles"]
+    assert intelligence["keyword_bubbles"] == []
     assert intelligence["notable_stories"][0]["title"] == "Example AI story"
 
 
@@ -343,6 +343,28 @@ def test_ai_intelligence_uses_monitoring_summary_without_anomalies(
         conn.execute(
             text(
                 """
+                INSERT INTO hn_story_snapshots (
+                    story_id, source_feed, title, author, score, num_comments,
+                    created_at, permalink, url, collected_at, monitor_gap_flag,
+                    gap_duration_minutes
+                ) VALUES (
+                    :story_id, 'newstories', :title, 'riley', 180, 64,
+                    :created_at, :permalink, :url, :collected_at, 0, NULL
+                )
+                """
+            ),
+            {
+                "story_id": "monitor-2",
+                "title": "Developers adopt open AI infrastructure",
+                "created_at": now,
+                "permalink": "https://news.ycombinator.com/item?id=monitor-2",
+                "url": "https://example.com/open-ai",
+                "collected_at": now,
+            },
+        )
+        conn.execute(
+            text(
+                """
                 INSERT INTO monitoring_summaries (
                     source_scope, response_json, story_count, created_at
                 ) VALUES ('all_feeds', :response_json, 8, :created_at)
@@ -352,7 +374,20 @@ def test_ai_intelligence_uses_monitoring_summary_without_anomalies(
                 "response_json": json.dumps(
                     {
                         "headline_summary": "Open AI infrastructure leads Hacker News",
-                        "top_keywords": ["during", "Show", "AI", "Open Source"],
+                        "keyword_signals": [
+                            {
+                                "concept": "AI Infrastructure",
+                                "supporting_story_ids": ["monitor-1", "monitor-2"],
+                            },
+                            {
+                                "concept": "Open Source",
+                                "supporting_story_ids": ["monitor-1", "monitor-2"],
+                            },
+                            {
+                                "concept": "Unsupported concept",
+                                "supporting_story_ids": ["monitor-1"],
+                            },
+                        ],
                         "top_topics": ["AI Infrastructure", "Developer Tools"],
                         "dominant_theme": "AI Infrastructure",
                         "sentiment_distribution": {
@@ -383,12 +418,10 @@ def test_ai_intelligence_uses_monitoring_summary_without_anomalies(
         "count": 0.5,
     }
     assert {item["keyword"] for item in intelligence["keyword_bubbles"]} >= {
-        "AI",
+        "AI Infrastructure",
         "Open Source",
     }
-    assert {item["raw_keyword"].casefold() for item in intelligence["keyword_bubbles"]}.isdisjoint(
-        {"during", "show"}
-    )
+    assert all(item["story_count"] == 2 for item in intelligence["keyword_bubbles"])
     assert intelligence["notable_stories"][0]["story_id"] == "monitor-1"
     assert intelligence["event_briefs"] == []
 

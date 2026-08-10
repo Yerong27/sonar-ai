@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import math
 import os
-import re
 from collections import Counter
 from typing import Any
 
@@ -15,36 +14,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from sonar.ai.brief_schema import normalize_brief_payload
 from sonar.config import settings
 from sonar.db import Database, db
-
-STOP_WORDS = {
-    "about", "after", "again", "against", "all", "also", "and", "any", "are", "because",
-    "before", "being", "between", "can", "could", "did", "do", "does", "don", "during",
-    "first", "for", "from", "get", "gets", "go", "goes", "good", "got", "has", "have",
-    "how", "into", "its", "made", "make", "makes", "more", "not", "now", "one", "our",
-    "over", "own", "say", "says", "that", "the", "their", "there", "these", "they", "this",
-    "through", "today", "under", "using", "via", "was", "we", "were", "what", "when",
-    "where", "which", "while", "who", "why", "will", "with", "would", "you", "your", "news",
-    "ask", "hacker", "hn", "show", "story", "stories", "feed", "newstories", "topstories",
-    "anomaly", "anomalies", "automatically", "average", "baseline", "brief", "briefs",
-    "comments", "detected", "engagement", "generated", "increase", "internal",
-    "label", "metric", "metrics", "monitoring", "score", "signal", "signals",
-    "spike", "volume", "new", "position", "use", "used", "uses", "app", "apps",
-}
-
-KEYWORD_DISPLAY_NAMES = {
-    "ai": "AI",
-    "api": "API",
-    "apis": "APIs",
-    "deepseek": "DeepSeek",
-    "github": "GitHub",
-    "gpu": "GPU",
-    "gpus": "GPUs",
-    "llm": "LLM",
-    "llms": "LLMs",
-    "openai": "OpenAI",
-    "xbox": "Xbox",
-}
-
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
     return dict(row)
@@ -88,49 +57,6 @@ def _latest_timestamp(database: Database, table_name: str, column_name: str) -> 
         return str(row["timestamp"]) if row else None
 
 
-def _keywords(text: str) -> list[str]:
-    words = re.findall(r"[A-Za-z][A-Za-z0-9+#.-]{1,}", text.lower())
-    cleaned = [word.strip(".-") for word in words]
-    return [word for word in cleaned if word not in STOP_WORDS and len(word) > 2]
-
-
-def _display_keyword(keyword: str) -> str:
-    keyword = keyword.strip()
-    known_name = KEYWORD_DISPLAY_NAMES.get(keyword.casefold())
-    if known_name:
-        return known_name
-    if any(character.isupper() for character in keyword[1:]):
-        return keyword
-    return keyword.upper() if len(keyword) <= 3 else keyword.title()
-
-
-def _keyword_candidates(value: Any, *, limit: int) -> list[str]:
-    """Keep only meaningful, unique noun-like keyword candidates from model output."""
-    if not isinstance(value, list):
-        return []
-
-    candidates: list[str] = []
-    seen: set[str] = set()
-    for item in value:
-        candidate = re.sub(r"\s+", " ", str(item or "").strip(" .,:;!?-_"))
-        tokens = re.findall(r"[A-Za-z][A-Za-z0-9+#.-]*", candidate.lower())
-        informative_tokens = [
-            token.strip(".-")
-            for token in tokens
-            if token.strip(".-") not in STOP_WORDS
-        ]
-        normalized = candidate.casefold()
-        if not candidate or not informative_tokens or normalized in seen:
-            continue
-        if len(tokens) > 3:
-            continue
-        seen.add(normalized)
-        candidates.append(candidate)
-        if len(candidates) >= limit:
-            break
-    return candidates
-
-
 def _string_list(value: Any, *, limit: int) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -157,39 +83,6 @@ def _monitoring_sentiment(payload: dict[str, Any]) -> dict[str, float]:
     return distribution if any(distribution.values()) else {}
 
 
-def _keyword_tokens(keyword: str) -> list[str]:
-    tokens = re.findall(r"[a-z0-9]+", str(keyword or "").lower())
-    short_whitelist = {"ai", "llm", "ml", "ui", "ux", "hn", "gpu", "api"}
-    return [token for token in tokens if len(token) > 2 or token in short_whitelist]
-
-
-def _keyword_match_score(keyword: str, title: str) -> tuple[int, bool]:
-    keyword_lower = str(keyword or "").strip().lower()
-    title_lower = str(title or "").lower()
-    if not keyword_lower or not title_lower:
-        return 0, False
-
-    tokens = _keyword_tokens(keyword_lower)
-    if not tokens:
-        return 0, False
-
-    phrase_match = keyword_lower in title_lower
-    matched_tokens = [
-        token
-        for token in tokens
-        if re.search(rf"(?<![a-z0-9]){re.escape(token)}(?![a-z0-9])", title_lower)
-    ]
-    token_matches = len(set(matched_tokens))
-    if phrase_match:
-        return max(4, 3 + token_matches), True
-    if token_matches == 0:
-        return 0, False
-
-    min_related_matches = 1 if len(tokens) == 1 else max(1, math.ceil(len(tokens) / 2))
-    score = token_matches + (1 if token_matches == len(tokens) and len(tokens) > 1 else 0)
-    return score, token_matches >= min_related_matches
-
-
 def _keyword_engagement_weight(score: Any, num_comments: Any) -> float:
     safe_score = max(float(score or 0), 0.0)
     safe_comments = max(float(num_comments or 0), 0.0)
@@ -198,40 +91,69 @@ def _keyword_engagement_weight(score: Any, num_comments: Any) -> float:
     return 1.0 + score_boost + comment_boost
 
 
-def _build_keyword_signals(keywords: list[str], stories: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    signals: list[dict[str, Any]] = []
-    for keyword in keywords:
-        matched: list[dict[str, Any]] = []
-        total_visibility = 0.0
-        for story in stories:
-            match_score, is_related = _keyword_match_score(keyword, str(story.get("title") or ""))
-            if not is_related:
-                continue
-            visibility_boost = _keyword_engagement_weight(story.get("score"), story.get("num_comments"))
-            total_visibility += match_score * visibility_boost
-            matched.append(
-                {
-                    "story_id": story.get("story_id"),
-                    "source_feed": story.get("source_feed"),
-                    "title": story.get("title"),
-                    "score": int(story.get("score") or 0),
-                    "num_comments": int(story.get("num_comments") or 0),
-                    "permalink": story.get("permalink"),
-                    "url": story.get("url"),
-                    "collected_at": story.get("collected_at"),
-                }
-            )
+def _grounded_keyword_signals(
+    monitoring_payload: dict[str, Any],
+    stories: list[dict[str, Any]],
+    *,
+    limit: int = 14,
+) -> list[dict[str, Any]]:
+    """Accept only model concepts with verifiable support from the current window."""
+    raw_signals = monitoring_payload.get("keyword_signals")
+    if not isinstance(raw_signals, list):
+        return []
 
-        matched.sort(key=lambda item: (item["score"], item["num_comments"]), reverse=True)
+    stories_by_id = {str(story.get("story_id")): story for story in stories}
+    signals: list[dict[str, Any]] = []
+    seen_concepts: set[str] = set()
+    for raw_signal in raw_signals:
+        if not isinstance(raw_signal, dict):
+            continue
+        concept = " ".join(str(raw_signal.get("concept") or "").split()).strip(" .,:;!?-_")
+        normalized = concept.casefold()
+        if not concept or len(concept) > 64 or len(concept.split()) > 4 or normalized in seen_concepts:
+            continue
+
+        supporting_ids = _string_list(raw_signal.get("supporting_story_ids"), limit=12)
+        matched = [stories_by_id[story_id] for story_id in supporting_ids if story_id in stories_by_id]
+        unique_matched = {str(story.get("story_id")): story for story in matched}
+        if len(unique_matched) < 2:
+            continue
+
+        evidence = [
+            {
+                "story_id": story.get("story_id"),
+                "source_feed": story.get("source_feed"),
+                "title": story.get("title"),
+                "score": int(story.get("score") or 0),
+                "num_comments": int(story.get("num_comments") or 0),
+                "permalink": story.get("permalink"),
+                "url": story.get("url"),
+                "collected_at": story.get("collected_at"),
+            }
+            for story in unique_matched.values()
+        ]
+        evidence.sort(key=lambda item: (item["score"], item["num_comments"]), reverse=True)
+        visibility = sum(
+            _keyword_engagement_weight(story["score"], story["num_comments"])
+            for story in evidence
+        )
+        seen_concepts.add(normalized)
         signals.append(
             {
-                "keyword": keyword,
-                "display_keyword": _display_keyword(keyword),
-                "visibility": round(total_visibility, 1),
-                "story_count": len(matched),
-                "stories": matched[:8],
+                "keyword": concept,
+                "display_keyword": concept,
+                "visibility": round(visibility, 1),
+                "story_count": len(evidence),
+                "stories": evidence[:8],
             }
         )
+        if len(signals) >= limit:
+            break
+
+    signals.sort(
+        key=lambda signal: (signal["story_count"], signal["visibility"]),
+        reverse=True,
+    )
     return signals
 
 
@@ -611,7 +533,6 @@ def create_app(
         briefs: list[dict[str, Any]] = []
         theme_counter: Counter[str] = Counter()
         sentiment_counter: Counter[str] = Counter()
-        keyword_counter: Counter[str] = Counter()
         latest_brief = None
 
         monitoring_payload = (
@@ -623,10 +544,6 @@ def create_app(
         dominant_theme = str(monitoring_payload.get("dominant_theme") or "").strip()
         if dominant_theme and dominant_theme not in monitoring_topics:
             monitoring_topics.insert(0, dominant_theme)
-        monitoring_keywords = _keyword_candidates(
-            monitoring_payload.get("top_keywords") or monitoring_payload.get("keywords"),
-            limit=16,
-        )
         monitoring_sentiment = _monitoring_sentiment(monitoring_payload)
         dominant_sentiment = (
             max(monitoring_sentiment, key=monitoring_sentiment.get)
@@ -667,13 +584,7 @@ def create_app(
             sentiment = str(payload.get("sentiment_label") or "neutral").strip().lower()
             if topic and not monitoring_topics:
                 theme_counter[topic] += 3
-                keyword_counter.update(_keywords(topic))
             sentiment_counter[sentiment or "neutral"] += 1
-            for insight in payload.get("bullet_insights") or []:
-                keyword_counter.update(_keywords(str(insight)))
-            for evidence in payload.get("evidence") or []:
-                title = str(evidence.get("title") or "")
-                keyword_counter.update(_keywords(title))
 
             brief = {
                 "id": row["id"],
@@ -718,34 +629,7 @@ def create_app(
             if str(story.get("story_id")) not in notable_ids
         )
         notable_stories = notable_stories[:8]
-        for story in story_pool[:18]:
-            score = int(story.get("score") or 0)
-            comments = int(story.get("num_comments") or 0)
-            for keyword in _keywords(str(story.get("title") or "")):
-                keyword_counter[keyword] += max(1, min(8, (score + comments) // 250 + 1))
-
-        # Lead with model-selected concepts, then add recurring title terms as a
-        # guarded fallback. A model can return perfectly reasonable concepts that
-        # do not occur verbatim in the current titles; without the fallback that
-        # produces an empty keyword view even when clear repeated terms exist.
-        raw_keywords = list(monitoring_keywords)
-        seen_keywords = {keyword.casefold() for keyword in raw_keywords}
-        for keyword, _count in keyword_counter.most_common(24):
-            if keyword.casefold() in seen_keywords:
-                continue
-            raw_keywords.append(keyword)
-            seen_keywords.add(keyword.casefold())
-        minimum_keyword_coverage = 2 if len(story_pool) >= 8 else 1
-        keyword_signals = [
-            signal
-            for signal in _build_keyword_signals(raw_keywords, story_pool)
-            if signal["story_count"] >= minimum_keyword_coverage
-        ]
-        keyword_signals.sort(
-            key=lambda signal: (signal["story_count"], signal["visibility"]),
-            reverse=True,
-        )
-        keyword_signals = keyword_signals[:14]
+        keyword_signals = _grounded_keyword_signals(monitoring_payload, story_pool)
 
         ranked_themes = [
             {"theme": theme, "rank": index + 1, "score": score}

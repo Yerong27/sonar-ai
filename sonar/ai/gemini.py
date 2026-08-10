@@ -69,11 +69,11 @@ CRITICAL INSTRUCTIONS:
 - headline_summary must read like a monitoring brief title (max 12 words). NOT an essay introduction.
 - top_topics must be 3–5 stable conceptual themes supported by multiple supplied stories.
 - top_topics must be concise labels (2–4 words each, e.g. "AI Model Releases", "Cloud Pricing").
-- Never use Hacker News mechanics, monitoring metrics, or generic labels as topics (for example "Show HN", "Engagement Spike", or "Hacker News").
-- top_keywords must be recurring concepts supported by at least 2 supplied stories.
-- top_keywords must be meaningful nouns or noun phrases (1–3 words), not verbs, prepositions, pronouns, or title fragments.
-- Exclude generic words such as "show", "ask", "during", "our", "new", and "position".
-- Exclude company or product names unless the same entity is materially discussed in at least 2 supplied stories.
+- Topics must describe the subject matter, never the feed mechanics, monitoring process, or engagement measurements.
+- keyword_signals must contain concrete entities, technologies, systems, protocols, or technical subject-matter noun phrases.
+- Do not return grammatical connectors, actions, qualities, or fragments of a title as concepts.
+- Every keyword signal must identify at least 2 supplied stories where that concept is central, not merely mentioned.
+- supporting_story_ids must contain only IDs copied exactly from the supplied stories.
 - bullet_insights must each be a single sentence with a maximum of 18 words.
 - dominant_theme must be 3–5 words.
 - summary must be 2 short sentences with a maximum of 45 words total.
@@ -83,7 +83,12 @@ CRITICAL INSTRUCTIONS:
 Required JSON schema:
 {{
   "headline_summary": "string — a concise monitoring brief headline, max 12 words",
-  "top_keywords": ["string — max 8 recurring concepts, each supported by 2+ stories"],
+  "keyword_signals": [
+    {
+      "concept": "string — a concrete 1–4 word concept",
+      "supporting_story_ids": ["string — at least 2 exact supplied story IDs"]
+    }
+  ],
   "top_topics": ["string — max 5, each 2–4 words"],
   "dominant_theme": "string — the single most prominent theme in 3–5 words",
   "sentiment_distribution": {{
