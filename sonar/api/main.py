@@ -724,12 +724,17 @@ def create_app(
             for keyword in _keywords(str(story.get("title") or "")):
                 keyword_counter[keyword] += max(1, min(8, (score + comments) // 250 + 1))
 
-        # Model-selected concepts are preferable to isolated title tokens. Only
-        # use the lexical fallback when no usable monitoring keywords exist;
-        # otherwise generic recurring words can crowd out the actual concepts.
-        raw_keywords = list(monitoring_keywords) or [
-            keyword for keyword, _count in keyword_counter.most_common(24)
-        ]
+        # Lead with model-selected concepts, then add recurring title terms as a
+        # guarded fallback. A model can return perfectly reasonable concepts that
+        # do not occur verbatim in the current titles; without the fallback that
+        # produces an empty keyword view even when clear repeated terms exist.
+        raw_keywords = list(monitoring_keywords)
+        seen_keywords = {keyword.casefold() for keyword in raw_keywords}
+        for keyword, _count in keyword_counter.most_common(24):
+            if keyword.casefold() in seen_keywords:
+                continue
+            raw_keywords.append(keyword)
+            seen_keywords.add(keyword.casefold())
         minimum_keyword_coverage = 2 if len(story_pool) >= 8 else 1
         keyword_signals = [
             signal
