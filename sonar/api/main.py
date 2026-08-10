@@ -604,8 +604,6 @@ def create_app(
         briefs: list[dict[str, Any]] = []
         theme_counter: Counter[str] = Counter()
         sentiment_counter: Counter[str] = Counter()
-        latest_brief = None
-
         monitoring_payload = (
             _json_loads(monitoring_row["response_json"], {}) if monitoring_row else {}
         )
@@ -680,8 +678,6 @@ def create_app(
                 "ai_status": row["ai_status"],
             }
             briefs.append(brief)
-            if latest_brief is None:
-                latest_brief = brief
 
         story_pool = [_row_to_dict(row) for row in story_rows]
         notable_story_ids = _string_list(
@@ -738,7 +734,7 @@ def create_app(
         ]
 
         return {
-            "latest_brief": latest_brief or monitoring_summary,
+            "latest_brief": monitoring_summary,
             "monitoring_summary": monitoring_summary,
             "ranked_themes": ranked_themes,
             "heading_visibility": heading_visibility,

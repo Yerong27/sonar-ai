@@ -305,7 +305,11 @@ def test_read_endpoints_return_seeded_data(database: Database) -> None:
     assert overview["latest_brief"]["headline_summary"] == "AI infrastructure story volume spiked"
 
     intelligence = client.get("/api/ai/intelligence").json()
-    assert intelligence["latest_brief"]["headline_summary"] == "AI infrastructure story volume spiked"
+    assert intelligence["latest_brief"]["headline_summary"] == "AI dominates current HN"
+    assert intelligence["latest_brief"]["summary_kind"] == "monitoring_summary"
+    assert intelligence["event_briefs"][0]["headline_summary"] == (
+        "AI infrastructure story volume spiked"
+    )
     assert intelligence["ranked_themes"][0]["theme"] == "AI Infrastructure"
     assert intelligence["sentiment_distribution"][2]["label"] == "neutral"
     assert intelligence["keyword_bubbles"] == []

@@ -241,6 +241,15 @@ function formatDateTime(value: unknown) {
     : date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function formatTimelineTick(value: unknown, spanMs: number) {
+  const date = new Date(Number(value));
+  if (Number.isNaN(date.getTime())) return "—";
+  if (spanMs >= 36 * 60 * 60 * 1000) {
+    return date.toLocaleDateString([], { month: "short", day: "numeric" });
+  }
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 function storyHref(story: Row) {
   const permalink = String(story.permalink || "");
   if (permalink.includes("news.ycombinator.com/item?id=")) return permalink;
@@ -324,9 +333,12 @@ function MetricCard({ label, value, note, alert = false }: { label: string; valu
 
 function ChartTooltip({ active, payload, label }: Row) {
   if (!active || !payload?.length) return null;
+  const displayLabel = typeof label === "number" && label > 1_000_000_000_000
+    ? formatDateTime(label)
+    : label;
   return (
     <div className="chart-tooltip">
-      <strong>{label || payload[0]?.payload?.metric_name || "Signal"}</strong>
+      <strong>{displayLabel || payload[0]?.payload?.metric_name || "Signal"}</strong>
       {payload.map((item: Row) => (
         <span key={item.dataKey || item.name} style={{ color: item.color || item.fill }}>
           {item.name}: {formatNumber(item.value, 2)}
@@ -468,10 +480,35 @@ export default function Dashboard() {
   const runtime = data.runtime;
   const counts = status.counts || {};
   const intelligence = data.intelligence || {};
-  const latestBrief = intelligence.latest_brief || data.overview.latest_brief;
+  const landscapeBrief = intelligence.monitoring_summary;
   const anomalies = data.anomalies || [];
   const alertCount = anomalies.filter((item) => Number(item.z_score || 0) >= 3).length;
-  const metricData = data.metrics.map((row) => ({ ...row, time: formatTime(row.collected_at) }));
+  const metricBuckets = new Map<number, Row>();
+  data.metrics.forEach((row) => {
+    const timestamp = new Date(String(row.collected_at || "")).getTime();
+    if (Number.isNaN(timestamp)) return;
+    const bucket = metricBuckets.get(timestamp) || {
+      timestamp,
+      engagement_score: 0,
+      story_volume: 0,
+    };
+    bucket.engagement_score += Number(row.engagement_score || 0);
+    bucket.story_volume += Number(row.story_volume || 0);
+    metricBuckets.set(timestamp, bucket);
+  });
+  const metricData = Array.from(metricBuckets.values()).sort(
+    (left, right) => Number(left.timestamp) - Number(right.timestamp),
+  );
+  const metricSpanMs = metricData.length > 1
+    ? Number(metricData[metricData.length - 1].timestamp) - Number(metricData[0].timestamp)
+    : 0;
+  const timelineTickCount = Math.min(7, metricData.length);
+  const metricTicks = Array.from({ length: timelineTickCount }, (_, index) => {
+    const dataIndex = timelineTickCount === 1
+      ? 0
+      : Math.round((index * (metricData.length - 1)) / (timelineTickCount - 1));
+    return Number(metricData[dataIndex]?.timestamp);
+  });
   const scatterData = anomalies.length
     ? anomalies.map((row, index) => ({
         ...row,
@@ -615,7 +652,18 @@ export default function Dashboard() {
                     }}
                   >
                     <CartesianGrid stroke="rgba(112,151,204,.10)" vertical={false} />
-                    <XAxis dataKey="time" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <XAxis
+                      type="number"
+                      scale="time"
+                      dataKey="timestamp"
+                      domain={["dataMin", "dataMax"]}
+                      ticks={metricTicks}
+                      minTickGap={36}
+                      tickFormatter={(value) => formatTimelineTick(value, metricSpanMs)}
+                      tick={{ fill: COLORS.muted, fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
                     <YAxis tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={42} />
                     <Tooltip content={<ChartTooltip />} />
                     <Line type="monotone" dataKey="engagement_score" name="Signal intensity" stroke={COLORS.cyan} strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
@@ -628,7 +676,7 @@ export default function Dashboard() {
                 </div>
                 {selectedWindowIndex !== null && (
                   <div className="trend-story-detail">
-                    <strong>{metricData[selectedWindowIndex]?.time || "Selected window"} · {selectedWindowStories.length} related stories</strong>
+                    <strong>{formatDateTime(metricData[selectedWindowIndex]?.timestamp) || "Selected window"} · {selectedWindowStories.length} related stories</strong>
                     {selectedWindowStories.map((story) => (
                       <a href={storyHref(story)} target="_blank" rel="noreferrer" key={story.story_id}>
                         <span>{story.title}</span>
@@ -774,26 +822,22 @@ export default function Dashboard() {
 
       {activeView === "intelligence" && (
       <section className="intelligence-section">
-        <SectionHeader eyebrow="AI intelligence" title="Evidence-backed signal briefing" copy="Concise model output, grounded in the stories and external context selected by the monitoring pipeline." />
+        <SectionHeader eyebrow="AI intelligence" title="Current news landscape" copy="Gemini synthesis of the themes, technologies, and discussions across the latest monitored stories." />
         <div className="ai-grid">
           <article className="latest-brief">
             <div className="brief-heading">
-              <span>{latestBrief?.summary_kind === "monitoring_summary" ? "Current landscape" : "Current assessment"}</span>
-              <span className="confidence">
-                {latestBrief?.summary_kind === "monitoring_summary"
-                  ? "Gemini landscape summary"
-                  : `${Math.round(Number(latestBrief?.confidence || 0) * 100)}% confidence`}
-              </span>
+              <span>Current landscape</span>
+              <span className="confidence">Gemini landscape summary</span>
             </div>
-            <h3>{latestBrief?.headline_summary || "No AI brief generated yet"}</h3>
-            <p>{latestBrief?.summary}</p>
+            <h3>{landscapeBrief?.headline_summary || "No landscape summary generated yet"}</h3>
+            <p>{landscapeBrief?.summary}</p>
             <ul>
-              {(latestBrief?.bullet_insights || []).slice(0, 3).map((item: string) => <li key={item}>{item}</li>)}
+              {(landscapeBrief?.bullet_insights || []).slice(0, 3).map((item: string) => <li key={item}>{item}</li>)}
             </ul>
             <div className="brief-tags">
-              <span>{latestBrief?.topic || "Signal intelligence"}</span>
-              <span>{latestBrief?.model || "provider ready"}</span>
-              <span>{latestBrief?.evidence_count || 0} evidence items</span>
+              <span>{landscapeBrief?.topic || "News landscape"}</span>
+              <span>{landscapeBrief?.model || "provider ready"}</span>
+              <span>{landscapeBrief?.evidence_count || 0} stories analyzed</span>
             </div>
           </article>
           <Panel title="Ranked themes" className="theme-panel">

@@ -199,11 +199,11 @@ a { color: inherit; text-decoration: none; }
   gap: 10px;
   align-items: stretch;
 }
-.signal-overview-panel { grid-column: span 8; padding-bottom: 8px; }
-.operations-status-panel { grid-column: span 4; }
+.signal-overview-panel { grid-column: span 9; padding-bottom: 8px; }
+.operations-status-panel { grid-column: span 3; }
 .emerging-panel { grid-column: span 3; }
-.velocity-panel { grid-column: span 5; }
-.signal-feed-panel { grid-column: span 4; }
+.velocity-panel { grid-column: span 3; }
+.signal-feed-panel { grid-column: span 6; }
 .emerging-panel, .velocity-panel, .signal-feed-panel { height: 318px; overflow: hidden; }
 .velocity-panel { display: flex; flex-direction: column; padding-bottom: 10px; }
 .velocity-panel > .recharts-responsive-container { flex: 1 1 auto; min-height: 0; }
@@ -505,11 +505,11 @@ footer p { margin: 0; }
 @media (max-width: 1180px) {
   .runtime-verification { grid-template-columns: 1fr auto; }
   .runtime-verification dl { grid-column: 1 / -1; grid-row: 2; }
-  .signal-overview-panel { grid-column: span 7; }
-  .operations-status-panel { grid-column: span 5; }
-  .emerging-panel { grid-column: span 4; }
-  .velocity-panel { grid-column: span 8; }
-  .signal-feed-panel { grid-column: span 12; height: auto; }
+  .signal-overview-panel { grid-column: span 8; }
+  .operations-status-panel { grid-column: span 4; }
+  .emerging-panel { grid-column: span 3; }
+  .velocity-panel { grid-column: span 3; }
+  .signal-feed-panel { grid-column: span 6; }
   .overview-lower-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 1050px) {
