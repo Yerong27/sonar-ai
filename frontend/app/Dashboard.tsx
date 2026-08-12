@@ -350,12 +350,13 @@ function ChartTooltip({ active, payload, label }: Row) {
 const TOPIC_COLORS = ["#42c8ee", "#3f88d9", "#386fc3", "#407acb", "#327caf", "#4777bc", "#2f659f", "#4a74a8", "#32688d", "#3a79a1"];
 
 function bubbleSignalStrength(item: Row) {
-  const explicit = Number(item.signal_strength || item.weight || 0);
+  const explicit = Number(item.signal_strength || 0);
   if (explicit > 0) return explicit;
-  return (item.stories || []).reduce(
+  const derived = (item.stories || []).reduce(
     (total: number, story: Row) => total + Number(story.score || 0) + (1.5 * Number(story.num_comments || 0)),
     0,
   );
+  return derived > 0 ? derived : Number(item.weight || 0);
 }
 
 function splitBubbleLabel(label: string, maxCharacters: number) {
@@ -374,17 +375,69 @@ function splitBubbleLabel(label: string, maxCharacters: number) {
   return lines;
 }
 
-function TopicBubbleTooltip({ active, payload }: Row) {
-  if (!active || !payload?.length) return null;
-  const topic = payload[0]?.payload;
-  return (
-    <div className="chart-tooltip">
-      <strong>{topic.keyword}</strong>
-      <span>{formatNumber(topic.story_count)} supporting stories</span>
-      <span>{formatNumber(topic.discussion_intensity)} average comments</span>
-      <span>{formatNumber(topic.signal_strength)} total HN attention</span>
-    </div>
-  );
+function packTopicBubbles(items: Row[], width: number, height: number) {
+  const ranked = items.slice(0, 10).map((item, index) => ({
+    item,
+    index,
+    strength: bubbleSignalStrength(item),
+  }));
+  const strengths = ranked.map((entry) => entry.strength);
+  const minimum = Math.min(...strengths, 0);
+  const maximum = Math.max(...strengths, 1);
+  const nodes = ranked
+    .map((entry) => {
+      const normalized = maximum === minimum ? .5 : (entry.strength - minimum) / (maximum - minimum);
+      const area = 4200 + (normalized * 11200);
+      return { ...entry, radius: Math.sqrt(area / Math.PI) };
+    })
+    .sort((a, b) => b.radius - a.radius);
+
+  const centerX = width * .5;
+  const centerY = height * .5;
+  for (const scale of [1, .92, .84, .76, .68, .6, .52]) {
+    const scaled = nodes.map((node) => ({ ...node, radius: node.radius * scale }));
+    const placed: Array<(typeof scaled)[number] & { x: number; y: number }> = [];
+    let complete = true;
+
+    for (let nodeIndex = 0; nodeIndex < scaled.length; nodeIndex += 1) {
+      const node = scaled[nodeIndex];
+      if (nodeIndex === 0) {
+        placed.push({ ...node, x: centerX, y: centerY });
+        continue;
+      }
+
+      let best: { x: number; y: number } | null = null;
+      for (let step = 0; step < 4200; step += 1) {
+        const angle = (step * 2.399963) + (nodeIndex * .83);
+        const distance = 18 + (step * .18);
+        const x = centerX + (Math.cos(angle) * distance);
+        const y = centerY + (Math.sin(angle) * distance * .7);
+        const inside = (
+          x - node.radius >= 10
+          && x + node.radius <= width - 10
+          && y - node.radius >= 10
+          && y + node.radius <= height - 10
+        );
+        const clear = placed.every(
+          (other) => Math.hypot(x - other.x, y - other.y) >= node.radius + other.radius + 9,
+        );
+        if (inside && clear) {
+          best = { x, y };
+          break;
+        }
+      }
+
+      if (!best) {
+        complete = false;
+        break;
+      }
+      placed.push({ ...node, ...best });
+    }
+
+    if (complete) return placed;
+  }
+
+  return [];
 }
 
 function TopicBubbleChart({
@@ -396,89 +449,66 @@ function TopicBubbleChart({
   selectedKeyword: string | null;
   onSelectKeyword: (keyword: string | null) => void;
 }) {
-  const chartData = items.slice(0, 10).map((item, index) => {
-    const stories = item.stories || [];
-    const storyCount = Number(item.story_count || stories.length || 0);
-    const comments = stories.reduce((total: number, story: Row) => total + Number(story.num_comments || 0), 0);
-    return {
-      ...item,
-      story_count: storyCount,
-      discussion_intensity: Number(item.discussion_intensity || (storyCount ? comments / storyCount : 0)),
-      signal_strength: bubbleSignalStrength(item),
-      color: TOPIC_COLORS[index % TOPIC_COLORS.length],
-    };
-  });
-  const maxCoverage = Math.max(...chartData.map((item) => item.story_count), 1);
-  const minCoverage = Math.min(...chartData.map((item) => item.story_count), 1);
-  const maxDiscussion = Math.max(...chartData.map((item) => item.discussion_intensity), 1);
+  const width = 720;
+  const height = 300;
+  const nodes = useMemo(() => packTopicBubbles(items, width, height), [items]);
+  const maxCoverage = Math.max(...items.map((item) => Number(item.story_count || 0)), 1);
   return (
     <div className="bubble-field">
-      {chartData.length ? (
-        <ResponsiveContainer width="100%" height={330}>
-          <ScatterChart margin={{ top: 38, right: 34, bottom: 34, left: 18 }}>
-            <CartesianGrid stroke="rgba(112,151,204,.10)" />
-            <XAxis
-              type="number"
-              dataKey="story_count"
-              domain={[Math.max(0, minCoverage - .5), maxCoverage + .5]}
-              allowDecimals={false}
-              tick={{ fill: COLORS.muted, fontSize: 10 }}
-              axisLine={false}
-              tickLine={false}
-              label={{ value: "Story coverage", position: "insideBottom", offset: -20, fill: COLORS.muted, fontSize: 10 }}
-            />
-            <YAxis
-              type="number"
-              dataKey="discussion_intensity"
-              domain={[0, Math.ceil(maxDiscussion * 1.08)]}
-              tick={{ fill: COLORS.muted, fontSize: 10 }}
-              axisLine={false}
-              tickLine={false}
-              width={44}
-              tickFormatter={(value) => formatNumber(value)}
-              label={{ value: "Avg comments", angle: -90, position: "insideLeft", fill: COLORS.muted, fontSize: 10 }}
-            />
-            <ZAxis type="number" dataKey="signal_strength" range={[700, 3300]} />
-            <Tooltip content={<TopicBubbleTooltip />} cursor={{ strokeDasharray: "3 3", stroke: "rgba(86,212,255,.2)" }} />
-            <Scatter
-              data={chartData}
-              shape={(props: Row) => {
-                const item = props.payload;
-                const radius = Math.sqrt(Number(props.size || 700) / Math.PI);
-                const lines = splitBubbleLabel(String(item.keyword), radius >= 48 ? 14 : 10).slice(0, 3);
-                const labelStart = -((lines.length - 1) * 6) - 4;
-                const isSelected = selectedKeyword === item.keyword;
-                return (
-                  <g
-                    className={`topic-bubble${isSelected ? " selected" : ""}`}
-                    transform={`translate(${props.cx} ${props.cy})`}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Filter notable stories by ${item.keyword}; ${item.story_count} supporting stories`}
-                    aria-pressed={isSelected}
-                    onClick={() => onSelectKeyword(isSelected ? null : item.keyword)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        onSelectKeyword(isSelected ? null : item.keyword);
-                      }
-                    }}
-                  >
-                    <circle r={radius} fill={item.color} fillOpacity=".74" />
-                    <text className="topic-bubble-label" textAnchor="middle">
-                      {lines.map((line, lineIndex) => (
-                        <tspan key={`${line}-${lineIndex}`} x="0" y={labelStart + (lineIndex * 12)}>{line}</tspan>
-                      ))}
-                    </text>
-                    <text className="topic-bubble-count" textAnchor="middle" y={labelStart + (lines.length * 12) + 3}>
-                      {item.story_count} stories
-                    </text>
-                  </g>
-                );
-              }}
-            />
-          </ScatterChart>
-        </ResponsiveContainer>
+      {nodes.length ? (
+        <svg className="topic-bubble-chart" viewBox={`0 0 ${width} ${height}`} role="group" aria-label="Topic landscape sized by Hacker News attention">
+          <defs>
+            {nodes.map((node) => {
+              const coverage = Number(node.item.story_count || 0) / maxCoverage;
+              return (
+                <radialGradient key={node.item.keyword} id={`topic-gradient-${node.index}`} cx="32%" cy="24%" r="78%">
+                  <stop offset="0%" stopColor={TOPIC_COLORS[node.index % TOPIC_COLORS.length]} stopOpacity={.68 + (coverage * .28)} />
+                  <stop offset="100%" stopColor="#173b70" stopOpacity=".94" />
+                </radialGradient>
+              );
+            })}
+          </defs>
+          {nodes.map((node) => {
+            const item = node.item;
+            const isSelected = selectedKeyword === item.keyword;
+            const maxCharacters = node.radius >= 48 ? 15 : node.radius >= 36 ? 12 : 10;
+            const lines = splitBubbleLabel(String(item.keyword), maxCharacters).slice(0, 3);
+            const lineHeight = node.radius >= 48 ? 13 : 11;
+            const labelStart = -((lines.length - 1) * lineHeight * .5) - (node.radius >= 38 ? 5 : 0);
+            const showCount = node.radius >= 34;
+            return (
+              <g
+                className={`topic-bubble${isSelected ? " selected" : ""}`}
+                key={item.keyword}
+                transform={`translate(${node.x} ${node.y})`}
+                role="button"
+                tabIndex={0}
+                aria-label={`Filter notable stories by ${item.keyword}; ${item.story_count} supporting stories`}
+                aria-pressed={isSelected}
+                onClick={() => onSelectKeyword(isSelected ? null : item.keyword)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectKeyword(isSelected ? null : item.keyword);
+                  }
+                }}
+              >
+                <title>{`${item.keyword}: ${item.story_count} stories · ${formatNumber(bubbleSignalStrength(item))} HN attention`}</title>
+                <circle r={node.radius} fill={`url(#topic-gradient-${node.index})`} />
+                <text className={`topic-bubble-label${node.radius < 38 ? " compact" : ""}`} textAnchor="middle">
+                  {lines.map((line, lineIndex) => (
+                    <tspan key={`${line}-${lineIndex}`} x="0" y={labelStart + (lineIndex * lineHeight)}>{line}</tspan>
+                  ))}
+                </text>
+                {showCount && (
+                  <text className="topic-bubble-count" textAnchor="middle" y={labelStart + (lines.length * lineHeight) + 5}>
+                    {item.story_count} stories
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
       ) : (
         <div className="bubble-empty">No recurring topic has enough supporting stories in this window.</div>
       )}
@@ -991,7 +1021,7 @@ export default function Dashboard() {
           <div className="keyword-evidence-row">
             <Panel title="Topic landscape" className="keyword-panel">
               <div className="interactive-panel-heading">
-                <span>Coverage → · discussion ↑ · bubble area = total HN attention</span>
+                <span>Bubble area = total HN attention · brightness = story coverage</span>
                 {selectedKeyword && <button type="button" onClick={() => setSelectedKeyword(null)}>Clear filter</button>}
               </div>
               <TopicBubbleChart

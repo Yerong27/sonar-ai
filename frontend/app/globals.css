@@ -360,13 +360,15 @@ a { color: inherit; text-decoration: none; }
 .interactive-panel-heading { min-height: 28px; display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #9fb1c6; font-size: 12px; }
 .interactive-panel-heading button { padding: 4px 7px; border: 1px solid rgba(86, 212, 255, .2); border-radius: 6px; color: var(--cyan); background: rgba(86, 212, 255, .06); cursor: pointer; font-size: 11px; }
 .interactive-panel-heading b { color: #aec0d4; font: 600 11px var(--font-sans); font-variant-numeric: tabular-nums; }
-.bubble-field { min-height: 330px; display: grid; place-items: center; overflow: hidden; }
+.bubble-field { min-height: 290px; display: grid; place-items: center; overflow: hidden; padding: 0 4px; }
+.topic-bubble-chart { display: block; width: 100%; height: 300px; overflow: visible; }
 .topic-bubble { cursor: pointer; outline: none; }
-.topic-bubble circle { stroke: rgba(156, 222, 255, .58); stroke-width: 1.5; filter: drop-shadow(0 8px 12px rgba(0,0,0,.2)); transition: stroke .16s ease, filter .16s ease, fill-opacity .16s ease; }
+.topic-bubble circle { stroke: rgba(132, 207, 245, .42); stroke-width: 1.25; filter: drop-shadow(0 8px 12px rgba(0,0,0,.2)); transition: stroke .16s ease, filter .16s ease, transform .16s ease; }
 .topic-bubble:hover circle, .topic-bubble:focus-visible circle { stroke: #a7ecff; stroke-width: 2.5; filter: drop-shadow(0 0 14px rgba(86,212,255,.32)); }
 .topic-bubble.selected circle { stroke: #effcff; stroke-width: 3; filter: drop-shadow(0 0 18px rgba(86,212,255,.45)); }
-.topic-bubble-label { pointer-events: none; fill: #f4fbff; font: 650 10px var(--font-sans); paint-order: stroke; stroke: rgba(7, 23, 45, .72); stroke-width: 2px; stroke-linejoin: round; }
-.topic-bubble-count { pointer-events: none; fill: #d2e7f3; font: 650 8px var(--font-sans); font-variant-numeric: tabular-nums; paint-order: stroke; stroke: rgba(7, 23, 45, .72); stroke-width: 2px; }
+.topic-bubble-label { pointer-events: none; fill: #f3faff; font: 650 12px var(--font-sans); }
+.topic-bubble-label.compact { font-size: 10.5px; }
+.topic-bubble-count { pointer-events: none; fill: #bcd9e8; font: 600 8.5px var(--font-sans); font-variant-numeric: tabular-nums; }
 .bubble-empty { align-self: center; padding: 24px 8px; color: #8fa3bb; font-size: 12px; text-align: center; }
 .notable-list { display: grid; }
 .notable-list a { display: flex; justify-content: space-between; gap: 18px; padding: 10px 5px; border-top: 1px solid rgba(103, 149, 208, .09); color: #b9e8fb; font-size: 12px; }
