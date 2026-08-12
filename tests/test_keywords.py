@@ -1,4 +1,4 @@
-from sonar.api.main import _validated_topic_clusters
+from sonar.api.main import _expanded_keyword_signals
 
 
 def _story(story_id: str, title: str, score: int = 100) -> dict:
@@ -14,19 +14,21 @@ def _story(story_id: str, title: str, score: int = 100) -> dict:
     }
 
 
-def test_validated_topics_expand_across_the_full_story_window() -> None:
+def test_model_concepts_expand_across_the_full_story_window() -> None:
     payload = {
-        "topic_signals": [
+        "keyword_signals": [
             {
                 "concept": "Large Language Models",
-                "aliases": ["Local LLM Inference"],
-                "supporting_story_ids": ["1", "2", "3"],
+                "concept_type": "technology",
+                "aliases": ["Local LLM Inference", "LLM"],
+                "supporting_story_ids": ["1", "2"],
                 "confidence": 0.92,
             },
             {
                 "concept": "Docker Sandboxes",
+                "concept_type": "technology",
                 "aliases": ["Agent Sandboxes"],
-                "supporting_story_ids": ["4", "5", "6"],
+                "supporting_story_ids": ["4", "5"],
                 "confidence": 0.86,
             },
         ]
@@ -37,88 +39,96 @@ def test_validated_topics_expand_across_the_full_story_window() -> None:
         _story("3", "Benchmarking large language models", 200),
         _story("4", "Docker Sandboxes for AI agents", 150),
         _story("5", "Agent Sandboxes for untrusted code", 130),
-        _story("6", "Running coding agents inside a Docker Sandbox", 120),
-        _story("7", "Local LLM Inference reaches laptops", 110),
+        _story("6", "Running coding agents inside Docker Sandboxes", 120),
     ]
 
-    signals = _validated_topic_clusters(payload, stories)
+    signals = _expanded_keyword_signals(payload, stories)
 
     assert [signal["keyword"] for signal in signals] == [
         "Large Language Models",
         "Docker Sandboxes",
     ]
-    assert signals[0]["story_count"] == 4
-    assert {story["story_id"] for story in signals[0]["stories"]} == {"1", "2", "3", "7"}
+    assert signals[0]["story_count"] == 3
     assert signals[1]["story_count"] == 3
 
 
-def test_topics_with_fewer_than_three_stories_are_not_presented() -> None:
+def test_same_story_may_support_multiple_meaningful_concepts() -> None:
     payload = {
-        "topic_signals": [
-            {
-                "concept": "One-off Product",
-                "aliases": [],
-                "supporting_story_ids": ["1", "2"],
-                "confidence": 0.95,
-            }
-        ]
-    }
-
-    assert _validated_topic_clusters(
-        payload,
-        [_story("1", "One-off Product launches today"), _story("2", "One-off Product review")],
-    ) == []
-
-
-def test_no_title_frequency_fallback_is_created_without_model_concepts() -> None:
-    stories = [_story("1", "Show developers a useful command")]
-
-    assert _validated_topic_clusters({}, stories) == []
-
-
-def test_low_confidence_topics_are_rejected() -> None:
-    payload = {
-        "topic_signals": [
-            {
-                "concept": "Developer Tooling",
-                "aliases": [],
-                "supporting_story_ids": ["1", "2", "3"],
-                "confidence": 0.4,
-            }
-        ]
-    }
-
-    signals = _validated_topic_clusters(
-        payload,
-        [
-            _story("1", "A new terminal workflow"),
-            _story("2", "Debugging build tools"),
-            _story("3", "A new compiler"),
-        ],
-    )
-
-    assert signals == []
-
-
-def test_overlapping_topics_do_not_reuse_the_same_primary_evidence() -> None:
-    payload = {
-        "topic_signals": [
+        "keyword_signals": [
             {
                 "concept": "Local AI Inference",
-                "aliases": [],
-                "supporting_story_ids": ["1", "2", "3", "4"],
-                "confidence": 0.95,
+                "concept_type": "technical_subject",
+                "aliases": ["Local LLM"],
+                "supporting_story_ids": ["1", "2"],
+                "confidence": 0.9,
             },
             {
-                "concept": "AI Hardware Systems",
+                "concept": "Apple Silicon",
+                "concept_type": "technology",
                 "aliases": [],
-                "supporting_story_ids": ["2", "3", "4", "5"],
-                "confidence": 0.9,
+                "supporting_story_ids": ["1", "3"],
+                "confidence": 0.88,
             },
         ]
     }
-    stories = [_story(str(index), f"Story {index}") for index in range(1, 6)]
+    stories = [
+        _story("1", "Local LLM inference on Apple Silicon"),
+        _story("2", "Local AI inference reaches laptops"),
+        _story("3", "Apple Silicon accelerates model serving"),
+    ]
 
-    signals = _validated_topic_clusters(payload, stories)
+    signals = _expanded_keyword_signals(payload, stories)
 
-    assert [signal["keyword"] for signal in signals] == ["Local AI Inference"]
+    assert len(signals) == 2
+    assert {signal["keyword"] for signal in signals} == {
+        "Local AI Inference",
+        "Apple Silicon",
+    }
+
+
+def test_plain_single_word_fragments_are_rejected_without_a_supported_type() -> None:
+    payload = {
+        "top_keywords": ["During", "Show"],
+    }
+    stories = [
+        _story("1", "During deployment the database failed"),
+        _story("2", "Show HN: a database monitor"),
+        _story("3", "Show HN: another monitor"),
+    ]
+
+    assert _expanded_keyword_signals(payload, stories) == []
+
+
+def test_specific_single_word_product_can_expand_beyond_one_sampled_story() -> None:
+    payload = {
+        "keyword_signals": [
+            {
+                "concept": "Docker",
+                "concept_type": "product",
+                "aliases": [],
+                "supporting_story_ids": ["1"],
+                "confidence": 0.9,
+            }
+        ]
+    }
+
+    signals = _expanded_keyword_signals(
+        payload,
+        [_story("1", "Docker adds agent sandboxes"), _story("2", "Running tools in Docker")],
+    )
+
+    assert [signal["keyword"] for signal in signals] == ["Docker"]
+    assert signals[0]["story_count"] == 2
+
+
+def test_fallback_requires_repetition_instead_of_a_word_blacklist() -> None:
+    stories = [
+        _story("1", "New OpenAI model reaches production"),
+        _story("2", "Developers compare OpenAI model latency"),
+        _story("3", "During an unrelated launch"),
+    ]
+
+    signals = _expanded_keyword_signals({}, stories)
+
+    assert any(signal["keyword"] == "OpenAI" for signal in signals)
+    assert all(signal["keyword"] != "During" for signal in signals)

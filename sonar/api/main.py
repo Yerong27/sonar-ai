@@ -92,15 +92,28 @@ def _keyword_engagement_weight(score: Any, num_comments: Any) -> float:
     return 1.0 + score_boost + comment_boost
 
 
-def _model_topic_candidates(
+def _has_specific_token_shape(value: str) -> bool:
+    """Recognise identifiers and names without maintaining a vocabulary blacklist."""
+    token = str(value or "").strip()
+    if not token:
+        return False
+    return (
+        any(character.isdigit() for character in token)
+        or any(not character.isalnum() for character in token)
+        or token.isupper()
+        or any(character.isupper() for character in token[1:])
+    )
+
+
+def _model_keyword_candidates(
     monitoring_payload: dict[str, Any],
     *,
-    limit: int = 8,
+    limit: int = 16,
 ) -> list[dict[str, Any]]:
-    """Read model-selected topic clusters without inventing fallback labels."""
-    raw_signals = monitoring_payload.get("topic_signals")
+    """Read model-selected concepts while rejecting non-standalone fragments."""
+    raw_signals = monitoring_payload.get("keyword_signals")
     if not isinstance(raw_signals, list):
-        raw_signals = monitoring_payload.get("keyword_signals")
+        raw_signals = monitoring_payload.get("topic_signals")
     if not isinstance(raw_signals, list):
         raw_signals = monitoring_payload.get("top_keywords")
     if not isinstance(raw_signals, list):
@@ -113,6 +126,7 @@ def _model_topic_candidates(
             concept = str(item.get("concept") or "")
             aliases = _string_list(item.get("aliases"), limit=6)
             supporting_ids = _string_list(item.get("supporting_story_ids"), limit=12)
+            concept_type = str(item.get("concept_type") or "").strip().casefold()
             try:
                 confidence = float(item.get("confidence", 1.0))
             except (TypeError, ValueError):
@@ -121,28 +135,37 @@ def _model_topic_candidates(
             concept = str(item or "")
             aliases = []
             supporting_ids = []
+            concept_type = ""
             confidence = 1.0
 
         concept = " ".join(concept.split()).strip(" .,:;!?-_")
         normalized = concept.casefold()
         words = re.findall(r"[A-Za-z0-9+#.-]+", concept)
+        allowed_single_word_types = {"entity", "product", "technology", "protocol"}
+        single_word_is_valid = bool(words) and (
+            _has_specific_token_shape(words[0])
+            or (
+                concept_type in allowed_single_word_types
+                and len(set(supporting_ids)) >= 1
+            )
+        )
         if (
             not concept
             or normalized in seen
             or len(concept) > 72
-            or not 2 <= len(words) <= 5
+            or not 1 <= len(words) <= 5
+            or (len(words) == 1 and not single_word_is_valid)
         ):
             continue
 
         clean_aliases: list[str] = []
         for alias in aliases:
             cleaned = " ".join(alias.split()).strip(" .,:;!?-_")
-            alias_words = re.findall(r"[A-Za-z0-9+#.-]+", cleaned)
             if (
                 cleaned
                 and cleaned.casefold() != normalized
                 and len(cleaned) <= 72
-                and 2 <= len(alias_words) <= 5
+                and 1 <= len(re.findall(r"[A-Za-z0-9+#.-]+", cleaned)) <= 5
             ):
                 clean_aliases.append(cleaned)
 
@@ -152,6 +175,7 @@ def _model_topic_candidates(
                 "concept": concept,
                 "aliases": clean_aliases,
                 "supporting_story_ids": supporting_ids,
+                "concept_type": concept_type,
                 "confidence": max(0.0, min(confidence, 1.0)),
             }
         )
@@ -160,9 +184,10 @@ def _model_topic_candidates(
     return candidates
 
 
-def _topic_title_match_strength(concept: str, aliases: list[str], title: str) -> float:
-    """Expand a validated topic only through explicit phrase-level title matches."""
+def _concept_title_match_strength(concept: str, aliases: list[str], title: str) -> float:
+    """Match a concept through its exact name, aliases, or a complete token set."""
     title_text = " ".join(str(title or "").casefold().split())
+    title_tokens = set(re.findall(r"[a-z0-9+#.-]+", title_text))
     best = 0.0
     for term in [concept, *aliases]:
         normalized = " ".join(str(term).casefold().split())
@@ -170,83 +195,105 @@ def _topic_title_match_strength(concept: str, aliases: list[str], title: str) ->
             continue
         if re.search(rf"(?<![a-z0-9]){re.escape(normalized)}(?![a-z0-9])", title_text):
             best = max(best, 1.0)
+            continue
+        tokens = set(re.findall(r"[a-z0-9+#.-]+", normalized))
+        if len(tokens) >= 2 and tokens.issubset(title_tokens):
+            best = max(best, 0.82)
     return best
 
 
-def _validated_topic_clusters(
+def _fallback_keyword_candidates(
+    stories: list[dict[str, Any]],
+    *,
+    limit: int = 12,
+) -> list[dict[str, Any]]:
+    """Recover repeated named terms when the model omits keyword signals.
+
+    The fallback uses repetition and token shape instead of an open-ended stopword list.
+    A normal title-cased word must occur away from the start of a title, which prevents
+    title scaffolding from becoming a signal merely because many headlines begin with it.
+    """
+    occurrences: dict[str, dict[str, Any]] = {}
+    for story in stories[:18]:
+        story_id = str(story.get("story_id") or "")
+        tokens = re.findall(r"[A-Za-z][A-Za-z0-9+#.-]{1,}", str(story.get("title") or ""))
+        for index, token in enumerate(tokens):
+            normalized = token.strip(".-").casefold()
+            if len(normalized) < 3:
+                continue
+            record = occurrences.setdefault(
+                normalized,
+                {
+                    "labels": Counter(),
+                    "story_ids": set(),
+                    "non_initial": 0,
+                    "specific": False,
+                    "proper_non_initial": False,
+                },
+            )
+            record["labels"][token.strip(".-")] += 1
+            record["story_ids"].add(story_id)
+            record["non_initial"] += int(index > 0)
+            record["specific"] = record["specific"] or _has_specific_token_shape(token)
+            record["proper_non_initial"] = record["proper_non_initial"] or (
+                index > 0 and token[:1].isupper() and token[1:].islower()
+            )
+
+    ranked = sorted(
+        occurrences.values(),
+        key=lambda item: (len(item["story_ids"]), item["non_initial"]),
+        reverse=True,
+    )
+    candidates: list[dict[str, Any]] = []
+    for record in ranked:
+        if len(record["story_ids"]) < 2 or not (
+            record["specific"] or record["proper_non_initial"]
+        ):
+            continue
+        concept = record["labels"].most_common(1)[0][0]
+        candidates.append(
+            {
+                "concept": concept,
+                "aliases": [],
+                "supporting_story_ids": sorted(record["story_ids"]),
+                "concept_type": "fallback_named_term",
+                "confidence": 0.6,
+            }
+        )
+        if len(candidates) >= limit:
+            break
+    return candidates
+
+
+def _expanded_keyword_signals(
     monitoring_payload: dict[str, Any],
     stories: list[dict[str, Any]],
     *,
-    limit: int = 8,
-    min_support: int = 3,
-    min_confidence: float = 0.65,
+    limit: int = 14,
+    min_support: int = 2,
 ) -> list[dict[str, Any]]:
-    """Keep coherent model clusters, enforce exclusive evidence, then expand safely."""
+    """Expand model-selected concepts across the complete current story window."""
     story_map = {str(story.get("story_id")): story for story in stories}
-    candidates: list[dict[str, Any]] = []
-    for candidate in _model_topic_candidates(monitoring_payload):
-        explicit_ids = {
-            story_id
-            for story_id in candidate["supporting_story_ids"]
-            if story_id in story_map
-        }
-        if candidate["confidence"] < min_confidence or len(explicit_ids) < min_support:
-            continue
-        candidates.append({**candidate, "explicit_ids": explicit_ids})
-
-    candidates.sort(
-        key=lambda candidate: (
-            candidate["confidence"],
-            len(candidate["explicit_ids"]),
-            sum(
-                int(story_map[story_id].get("score") or 0)
-                + int(story_map[story_id].get("num_comments") or 0)
-                for story_id in candidate["explicit_ids"]
-            ),
-        ),
-        reverse=True,
-    )
-
-    # One story is primary evidence for one topic. This prevents broad and narrow
-    # labels from presenting the same stories as separate trends.
-    claimed_ids: set[str] = set()
-    accepted: list[dict[str, Any]] = []
-    for candidate in candidates:
-        unique_ids = candidate["explicit_ids"] - claimed_ids
-        if len(unique_ids) < min_support:
-            continue
-        candidate["matched"] = {
-            story_id: (story_map[story_id], 1.0) for story_id in unique_ids
-        }
-        claimed_ids.update(unique_ids)
-        accepted.append(candidate)
-        if len(accepted) >= limit:
-            break
-
-    # The model only reads a cost-controlled sample. Expand accepted clusters to
-    # the wider window using exact topic/alias phrases, never loose token overlap.
-    for story_id, story in story_map.items():
-        if story_id in claimed_ids:
-            continue
-        matches = [
-            (
-                _topic_title_match_strength(
-                    candidate["concept"],
-                    candidate["aliases"],
-                    str(story.get("title") or ""),
-                ),
-                candidate["confidence"],
-                candidate,
-            )
-            for candidate in accepted
-        ]
-        strength, _confidence, winner = max(matches, default=(0.0, 0.0, None), key=lambda item: item[:2])
-        if winner is not None and strength >= 1.0:
-            winner["matched"][story_id] = (story, strength)
+    candidates = _model_keyword_candidates(monitoring_payload)
+    if not candidates:
+        candidates = _fallback_keyword_candidates(stories)
 
     signals: list[dict[str, Any]] = []
-    for candidate in accepted:
-        matched = candidate["matched"]
+    for candidate in candidates:
+        explicit_ids = set(candidate["supporting_story_ids"])
+        matched: dict[str, tuple[dict[str, Any], float]] = {}
+        for story_id, story in story_map.items():
+            strength = _concept_title_match_strength(
+                candidate["concept"],
+                candidate["aliases"],
+                str(story.get("title") or ""),
+            )
+            if story_id in explicit_ids:
+                strength = max(strength, 1.0)
+            if strength > 0:
+                matched[story_id] = (story, strength)
+        if len(matched) < min_support:
+            continue
 
         evidence = [
             {
@@ -288,7 +335,25 @@ def _validated_topic_clusters(
         ),
         reverse=True,
     )
-    return signals[:limit]
+
+    deduplicated: list[dict[str, Any]] = []
+    for signal in signals:
+        signal_ids = {str(story["story_id"]) for story in signal["stories"]}
+        duplicate = False
+        for existing in deduplicated:
+            existing_ids = {str(story["story_id"]) for story in existing["stories"]}
+            evidence_overlap = len(signal_ids & existing_ids) / max(1, len(signal_ids | existing_ids))
+            label_tokens = set(re.findall(r"[a-z0-9]+", signal["keyword"].casefold()))
+            existing_tokens = set(re.findall(r"[a-z0-9]+", existing["keyword"].casefold()))
+            label_overlap = len(label_tokens & existing_tokens) / max(1, min(len(label_tokens), len(existing_tokens)))
+            if evidence_overlap >= 0.8 and label_overlap >= 0.5:
+                duplicate = True
+                break
+        if not duplicate:
+            deduplicated.append(signal)
+        if len(deduplicated) >= limit:
+            break
+    return deduplicated
 
 
 def create_app(
@@ -764,7 +829,7 @@ def create_app(
             if str(story.get("story_id")) not in notable_ids
         )
         notable_stories = notable_stories[:8]
-        topic_clusters = _validated_topic_clusters(monitoring_payload, story_pool)
+        keyword_signals = _expanded_keyword_signals(monitoring_payload, story_pool)
 
         ranked_themes = (
             [
@@ -773,7 +838,7 @@ def create_app(
                     "rank": index + 1,
                     "score": signal["story_count"],
                 }
-                for index, signal in enumerate(topic_clusters)
+                for index, signal in enumerate(keyword_signals)
             ]
             if monitoring_payload
             else [
@@ -809,7 +874,7 @@ def create_app(
                 "confidence": signal["confidence"],
                 "stories": signal["stories"],
             }
-            for index, signal in enumerate(topic_clusters)
+            for index, signal in enumerate(keyword_signals)
         ]
         sentiment_distribution = [
             {
@@ -827,9 +892,9 @@ def create_app(
             "latest_brief": monitoring_summary,
             "monitoring_summary": monitoring_summary,
             "ranked_themes": ranked_themes,
+            # Keep both keys during the API/frontend rollout. They are aliases for
+            # one concept series, not two different visualisations.
             "topic_clusters": topic_bubbles,
-            # Backwards-compatible during the API/frontend rollout. New clients
-            # should read topic_clusters; the duplicate visibility series is gone.
             "keyword_bubbles": topic_bubbles,
             "sentiment_distribution": sentiment_distribution,
             "notable_stories": notable_stories,

@@ -1014,9 +1014,9 @@ export default function Dashboard() {
             )}
           </Panel>
           <div className="keyword-evidence-row">
-            <Panel title="Topic landscape" className="keyword-panel">
+            <Panel title="Keyword explorer" className="keyword-panel">
               <div className="interactive-panel-heading">
-                <span>{topicClusters.length < 3 ? "Only independently reviewed topics with at least three supporting stories are shown" : "Bubble area = total HN attention · every topic has at least three independently reviewed stories"}</span>
+                <span>{topicClusters.length < 3 ? "Only concepts supported by multiple stories are shown" : "Model-selected concepts · expanded across the current story window · bubble area = HN attention"}</span>
                 {selectedKeyword && <button type="button" onClick={() => setSelectedKeyword(null)}>Clear filter</button>}
               </div>
               <TopicBubbleChart
