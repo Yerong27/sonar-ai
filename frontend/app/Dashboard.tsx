@@ -448,6 +448,30 @@ function TopicBubbleChart({
   const height = 300;
   const nodes = useMemo(() => packTopicBubbles(items, width, height), [items]);
   const maxCoverage = Math.max(...items.map((item) => Number(item.story_count || 0)), 1);
+  if (items.length > 0 && items.length < 3) {
+    return (
+      <div className="topic-signal-list" aria-label={`${items.length} coherent topic signal${items.length === 1 ? "" : "s"}`}>
+        {items.map((item) => {
+          const isSelected = selectedKeyword === item.keyword;
+          return (
+            <button
+              type="button"
+              className={`topic-signal-card${isSelected ? " selected" : ""}`}
+              key={item.keyword}
+              aria-pressed={isSelected}
+              onClick={() => onSelectKeyword(isSelected ? null : item.keyword)}
+            >
+              <span>
+                <b>{item.keyword}</b>
+                <small>{item.story_count} supporting stories · {Math.round(Number(item.confidence || 0) * 100)}% reviewed confidence</small>
+              </span>
+              <strong>{formatNumber(bubbleSignalStrength(item))}<small>HN attention</small></strong>
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
   return (
     <div className="bubble-field">
       {nodes.length ? (
@@ -992,7 +1016,7 @@ export default function Dashboard() {
           <div className="keyword-evidence-row">
             <Panel title="Topic landscape" className="keyword-panel">
               <div className="interactive-panel-heading">
-                <span>Only coherent topics with at least three supporting stories are shown · bubble area = total HN attention</span>
+                <span>{topicClusters.length < 3 ? "Only independently reviewed topics with at least three supporting stories are shown" : "Bubble area = total HN attention · every topic has at least three independently reviewed stories"}</span>
                 {selectedKeyword && <button type="button" onClick={() => setSelectedKeyword(null)}>Clear filter</button>}
               </div>
               <TopicBubbleChart
