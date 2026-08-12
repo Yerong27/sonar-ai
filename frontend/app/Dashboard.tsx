@@ -992,23 +992,6 @@ export default function Dashboard() {
             </div>
           </article>
           <div className="intelligence-analysis-row">
-            <Panel title="Ranked themes" className="theme-panel">
-              {emergingTopics.length ? (
-                <ol>
-                  {emergingTopics.map((item: Row) => (
-                    <li key={item.theme}>
-                      <span>{String(item.rank).padStart(2, "0")}</span>
-                      <b>{item.theme}</b>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <div className="panel-empty-state compact">
-                  <b>No themes classified yet</b>
-                  <span>The next Gemini landscape summary will populate this ranking.</span>
-                </div>
-              )}
-            </Panel>
             <Panel title="Keyword explorer" className="keyword-panel">
               <div className="interactive-panel-heading">
                 <span>{topicClusters.length < 3 ? "Only concepts supported by multiple stories are shown" : "Model-selected concepts · expanded across the current story window · bubble area = HN attention"}</span>
@@ -1020,28 +1003,47 @@ export default function Dashboard() {
                 onSelectKeyword={setSelectedKeyword}
               />
             </Panel>
-            <Panel title="Signal sentiment" className="sentiment-panel">
-              {hasSentiment ? (
-                <ResponsiveContainer width="100%" height={210}>
-                  <BarChart data={sentimentData}>
-                    <CartesianGrid stroke="rgba(112,151,204,.10)" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={30} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Bar dataKey="count" name="Share" radius={[3, 3, 0, 0]}>
-                      {sentimentData.map((item: Row) => (
-                        <Cell key={item.label} fill={{ positive: COLORS.green, negative: COLORS.red, neutral: "#7f8da5", mixed: COLORS.orange }[item.label as string] || COLORS.cyan} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="panel-empty-state compact">
-                  <b>No sentiment distribution yet</b>
-                  <span>The next semantic scan will classify the current story landscape.</span>
-                </div>
-              )}
-            </Panel>
+            <div className="intelligence-side-stack">
+              <Panel title="Ranked themes" className="theme-panel">
+                {emergingTopics.length ? (
+                  <ol>
+                    {emergingTopics.map((item: Row) => (
+                      <li key={item.theme}>
+                        <span>{String(item.rank).padStart(2, "0")}</span>
+                        <b>{item.theme}</b>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <div className="panel-empty-state compact">
+                    <b>No themes classified yet</b>
+                    <span>The next Gemini landscape summary will populate this ranking.</span>
+                  </div>
+                )}
+              </Panel>
+              <Panel title="Signal sentiment" className="sentiment-panel">
+                {hasSentiment ? (
+                  <ResponsiveContainer width="100%" height={150}>
+                    <BarChart data={sentimentData}>
+                      <CartesianGrid stroke="rgba(112,151,204,.10)" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={30} />
+                      <Tooltip content={<ChartTooltip />} />
+                      <Bar dataKey="count" name="Share" radius={[3, 3, 0, 0]}>
+                        {sentimentData.map((item: Row) => (
+                          <Cell key={item.label} fill={{ positive: COLORS.green, negative: COLORS.red, neutral: "#7f8da5", mixed: COLORS.orange }[item.label as string] || COLORS.cyan} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="panel-empty-state compact">
+                    <b>No sentiment distribution yet</b>
+                    <span>The next semantic scan will classify the current story landscape.</span>
+                  </div>
+                )}
+              </Panel>
+            </div>
           </div>
           <Panel title="Notable stories" className="notable-panel">
             <div className="interactive-panel-heading">
