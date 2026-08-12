@@ -8,9 +8,11 @@ class _Response:
 class _RecordingModel:
     def __init__(self) -> None:
         self.prompt = ""
+        self.generation_config = {}
 
-    def generate_content(self, prompt: str) -> _Response:
+    def generate_content(self, prompt: str, *, generation_config: dict) -> _Response:
         self.prompt = prompt
+        self.generation_config = generation_config
         return _Response()
 
 
@@ -33,3 +35,7 @@ def test_monitoring_prompt_renders_topic_signal_schema() -> None:
     assert "grouping related stories" in explainer.model.prompt
     assert "return 8–10 topic_signals" in explainer.model.prompt
     assert "Do not stop after restating" in explainer.model.prompt
+    assert explainer.model.generation_config == {
+        "response_mime_type": "application/json",
+        "max_output_tokens": 4096,
+    }

@@ -118,7 +118,13 @@ Recent stories:
 
     def _generate_json(self, prompt: str) -> dict | None:
         try:
-            response = self.model.generate_content(prompt)
+            response = self.model.generate_content(
+                prompt,
+                generation_config={
+                    "response_mime_type": "application/json",
+                    "max_output_tokens": 4096,
+                },
+            )
             raw_text = response.text.strip()
         except ResourceExhausted as exc:
             self.last_error = f"quota_exceeded: {exc}"
