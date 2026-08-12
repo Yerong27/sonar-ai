@@ -991,6 +991,23 @@ export default function Dashboard() {
               <span>{landscapeBrief?.evidence_count || 0} stories analyzed</span>
             </div>
           </article>
+          <Panel title="Ranked themes" className="theme-panel">
+            {emergingTopics.length ? (
+              <ol>
+                {emergingTopics.map((item: Row) => (
+                  <li key={item.theme}>
+                    <span>{String(item.rank).padStart(2, "0")}</span>
+                    <b>{item.theme}</b>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="panel-empty-state compact">
+                <b>No themes classified yet</b>
+                <span>The next Gemini landscape summary will populate this ranking.</span>
+              </div>
+            )}
+          </Panel>
           <Panel title="Signal sentiment" className="sentiment-panel">
             {hasSentiment ? (
               <ResponsiveContainer width="100%" height={210}>

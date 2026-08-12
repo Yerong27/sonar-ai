@@ -349,7 +349,7 @@ a { color: inherit; text-decoration: none; }
 .brief-tags, .case-tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; }
 .brief-tags span, .case-tags span, .feed-chip, .verified-badge { padding: 5px 8px; border: 1px solid rgba(86, 212, 255, .14); border-radius: 999px; color: #a8d9ed; background: rgba(31, 96, 138, .12); font: 600 10px var(--font-sans); }
 .theme-panel ol { margin: 0; padding: 0; list-style: none; }
-.theme-panel li { display: grid; grid-template-columns: 28px 1fr 32px; align-items: center; gap: 8px; min-height: 38px; border-top: 1px solid rgba(103, 149, 208, .09); }
+.theme-panel li { display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: 8px; min-height: 38px; border-top: 1px solid rgba(103, 149, 208, .09); }
 .theme-panel li:first-child { border-top: 0; }
 .theme-panel li span { color: var(--cyan); font: 700 11px var(--font-data); font-variant-numeric: tabular-nums; }
 .theme-panel li b { font-size: 13px; }
