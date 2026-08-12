@@ -70,11 +70,13 @@ CRITICAL INSTRUCTIONS:
 - top_topics must be 3–5 stable conceptual themes supported by multiple supplied stories.
 - top_topics must be concise labels (2–4 words each, e.g. "AI Model Releases", "Cloud Pricing").
 - Topics must describe the subject matter, never the feed mechanics, monitoring process, or engagement measurements.
-- Return 6–12 keyword_signals when the supplied stories contain that many distinct, meaningful concepts.
+- Return 5–10 keyword_signals only when each concept is central to at least two supplied stories.
 - keyword_signals must contain concrete entities, products, technologies, systems, protocols, or technical subject-matter noun phrases.
 - Do not return grammatical connectors, actions, qualities, or fragments of a title as concepts.
 - aliases must include only genuine alternative names, abbreviations, or spelling variants useful for matching other stories.
-- supporting_story_ids must identify supplied stories where the concept is central; one supplied story is sufficient for an emerging concept.
+- supporting_story_ids must identify at least two supplied stories where the concept is central.
+- Omit single-story entities and concepts. They may be notable stories, but they are not recurring landscape signals.
+- Prefer distinct concepts with different evidence sets; do not return broad and narrow synonyms supported by the same stories.
 - Never invent IDs or aliases.
 - bullet_insights must each be a single sentence with a maximum of 18 words.
 - dominant_theme must be 3–5 words.

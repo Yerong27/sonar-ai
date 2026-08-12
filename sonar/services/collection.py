@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Callable
 from collections import defaultdict
 from dataclasses import asdict, dataclass
@@ -71,6 +72,67 @@ def _gemini_story_payload(story: dict[str, object]) -> dict[str, object]:
         "num_comments": int(story.get("num_comments", 0) or 0),
         "created_at": story.get("created_at"),
     }
+
+
+def _select_monitoring_sample(stories: list[dict], *, limit: int) -> list[dict]:
+    """Keep one bounded model call while covering high-signal and fresh stories."""
+    if limit <= 0:
+        return []
+
+    unique: dict[str, dict] = {}
+    for story in stories:
+        story_id = str(story.get("story_id") or "")
+        if not story_id:
+            continue
+        current = unique.get(story_id)
+        engagement = int(story.get("score", 0) or 0) + int(
+            story.get("num_comments", 0) or 0
+        )
+        current_engagement = (
+            int(current.get("score", 0) or 0) + int(current.get("num_comments", 0) or 0)
+            if current
+            else -1
+        )
+        if engagement > current_engagement:
+            unique[story_id] = story
+
+    ranked = sorted(
+        unique.values(),
+        key=lambda row: (
+            int(row.get("score", 0) or 0) + int(row.get("num_comments", 0) or 0),
+            str(row.get("created_at") or ""),
+        ),
+        reverse=True,
+    )
+    if len(ranked) <= limit:
+        return ranked
+
+    high_signal_count = min(len(ranked), max(1, math.ceil(limit * 0.6)))
+    selected = ranked[:high_signal_count]
+    selected_ids = {str(story.get("story_id")) for story in selected}
+
+    feed_queues: dict[str, list[dict]] = defaultdict(list)
+    for story in sorted(
+        ranked[high_signal_count:],
+        key=lambda row: str(row.get("created_at") or ""),
+        reverse=True,
+    ):
+        feed_queues[str(story.get("source_feed") or "other")].append(story)
+
+    feeds = sorted(feed_queues)
+    while len(selected) < limit and any(feed_queues.values()):
+        for feed in feeds:
+            queue = feed_queues[feed]
+            while queue and str(queue[0].get("story_id")) in selected_ids:
+                queue.pop(0)
+            if not queue:
+                continue
+            story = queue.pop(0)
+            selected.append(story)
+            selected_ids.add(str(story.get("story_id")))
+            if len(selected) >= limit:
+                break
+    return selected
 
 
 def _select_explanation_targets(anomalies: list[dict]) -> set[int]:
@@ -340,14 +402,12 @@ class CollectionCycleService:
             if elapsed < settings.monitoring_interval_seconds:
                 return False
 
-        ranked_stories = sorted(
-            stories,
-            key=lambda row: (int(row.get("score", 0)) + int(row.get("num_comments", 0))),
-            reverse=True,
-        )
         sample = [
             _gemini_story_payload(story)
-            for story in ranked_stories[: settings.monitoring_story_sample_size]
+            for story in _select_monitoring_sample(
+                stories,
+                limit=settings.monitoring_story_sample_size,
+            )
         ]
         summary = self.gemini.summarize_monitoring_snapshot(sample)
         if summary:

@@ -35,6 +35,7 @@ def test_model_concepts_expand_across_the_full_story_window() -> None:
         _story("3", "Benchmarking large language models", 200),
         _story("4", "Docker Sandboxes for AI agents", 150),
         _story("5", "A completely unrelated database story", 500),
+        _story("6", "Running coding agents inside a Docker Sandbox", 120),
     ]
 
     signals = _expanded_keyword_signals(payload, stories)
@@ -45,7 +46,24 @@ def test_model_concepts_expand_across_the_full_story_window() -> None:
     ]
     assert signals[0]["story_count"] == 3
     assert {story["story_id"] for story in signals[0]["stories"]} == {"1", "2", "3"}
-    assert signals[1]["story_count"] == 1
+    assert signals[1]["story_count"] == 2
+
+
+def test_single_story_concepts_are_not_presented_as_recurring_signals() -> None:
+    payload = {
+        "keyword_signals": [
+            {
+                "concept": "One-off Product",
+                "aliases": [],
+                "supporting_story_ids": ["1"],
+            }
+        ]
+    }
+
+    assert _expanded_keyword_signals(
+        payload,
+        [_story("1", "One-off Product launches today")],
+    ) == []
 
 
 def test_no_title_frequency_fallback_is_created_without_model_concepts() -> None:

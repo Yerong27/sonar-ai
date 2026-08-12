@@ -172,9 +172,10 @@ def _expanded_keyword_signals(
     monitoring_payload: dict[str, Any],
     stories: list[dict[str, Any]],
     *,
-    limit: int = 14,
+    limit: int = 10,
+    min_support: int = 2,
 ) -> list[dict[str, Any]]:
-    """Expand model-selected concepts across the complete current story window."""
+    """Validate model concepts against the full window and keep recurring signals."""
     signals: list[dict[str, Any]] = []
     for candidate in _model_keyword_candidates(monitoring_payload):
         concept = candidate["concept"]
@@ -188,7 +189,7 @@ def _expanded_keyword_signals(
                 strength = max(strength, 1.0)
             if strength > 0:
                 matched[story_id] = (story, strength)
-        if not matched:
+        if len(matched) < min_support:
             continue
 
         evidence = [
@@ -216,16 +217,39 @@ def _expanded_keyword_signals(
                 "keyword": concept,
                 "display_keyword": concept,
                 "visibility": round(visibility, 1),
+                "coverage": round(sum(item["relevance"] for item in evidence), 1),
                 "story_count": len(matched),
                 "stories": evidence[:8],
+                "story_ids": set(matched),
             }
         )
 
     signals.sort(
-        key=lambda signal: (signal["story_count"], signal["visibility"]),
+        key=lambda signal: (
+            signal["story_count"],
+            signal["coverage"],
+            signal["visibility"],
+        ),
         reverse=True,
     )
-    return signals[:limit]
+    distinct_signals: list[dict[str, Any]] = []
+    for signal in signals:
+        signal_ids = signal["story_ids"]
+        duplicates_existing = any(
+            len(signal_ids & existing["story_ids"])
+            / max(1, min(len(signal_ids), len(existing["story_ids"])))
+            >= 0.8
+            for existing in distinct_signals
+        )
+        if duplicates_existing:
+            continue
+        distinct_signals.append(signal)
+        if len(distinct_signals) >= limit:
+            break
+
+    for signal in distinct_signals:
+        signal.pop("story_ids", None)
+    return distinct_signals
 
 
 def create_app(
@@ -705,7 +729,7 @@ def create_app(
         heading_visibility = [
             {
                 "keyword": signal["display_keyword"],
-                "visibility": max(1, int(signal["visibility"])),
+                "visibility": signal["story_count"],
                 "story_count": signal["story_count"],
             }
             for signal in keyword_signals[:8]
@@ -714,7 +738,7 @@ def create_app(
             {
                 "keyword": signal["display_keyword"],
                 "raw_keyword": signal["keyword"],
-                "weight": max(1, int(signal["visibility"])),
+                "weight": signal["story_count"],
                 "rank": index + 1,
                 "story_count": signal["story_count"],
                 "stories": signal["stories"],

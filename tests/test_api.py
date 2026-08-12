@@ -424,15 +424,14 @@ def test_ai_intelligence_uses_monitoring_summary_without_anomalies(
         "label": "positive",
         "count": 0.5,
     }
-    assert {item["keyword"] for item in intelligence["keyword_bubbles"]} >= {
+    assert {item["keyword"] for item in intelligence["keyword_bubbles"]} == {
         "AI Infrastructure",
-        "Open Source",
     }
     story_counts = {
         item["keyword"]: item["story_count"]
         for item in intelligence["keyword_bubbles"]
     }
-    assert story_counts == {"AI Infrastructure": 2, "Open Source": 1}
+    assert story_counts == {"AI Infrastructure": 2}
     assert intelligence["notable_stories"][0]["story_id"] == "monitor-1"
     assert intelligence["event_briefs"] == []
 

@@ -195,22 +195,22 @@ function makeDemoData(): DashboardData {
         { rank: 5, theme: "Security", score: 3 },
       ],
       heading_visibility: [
-        { keyword: "AI", visibility: 501 }, { keyword: "Tools", visibility: 408 },
-        { keyword: "Data", visibility: 161 }, { keyword: "Programming", visibility: 143 },
-        { keyword: "Security", visibility: 121 },
+        { keyword: "AI", visibility: 5 }, { keyword: "Tools", visibility: 5 },
+        { keyword: "Data", visibility: 4 }, { keyword: "Programming", visibility: 5 },
+        { keyword: "Security", visibility: 5 },
       ],
       sentiment_distribution: [
         { label: "positive", count: 3 }, { label: "negative", count: 1 },
         { label: "neutral", count: 4 }, { label: "mixed", count: 2 },
       ],
       keyword_bubbles: [
-        { keyword: "AI", raw_keyword: "ai", weight: 100, story_count: 5, stories: [demoStories[1], demoStories[3], demoStories[7], demoStories[15], demoStories[20]] },
-        { keyword: "Security", raw_keyword: "security", weight: 58, story_count: 5, stories: [demoStories[4], demoStories[5], demoStories[18], demoStories[20], demoStories[21]] },
-        { keyword: "Programming", raw_keyword: "programming", weight: 52, story_count: 5, stories: [demoStories[0], demoStories[2], demoStories[10], demoStories[14], demoStories[19]] },
-        { keyword: "Open Source", raw_keyword: "open source", weight: 46, story_count: 4, stories: [demoStories[5], demoStories[19], demoStories[20], demoStories[21]] },
-        { keyword: "Developer Tools", raw_keyword: "developer tools", weight: 41, story_count: 5, stories: [demoStories[0], demoStories[2], demoStories[5], demoStories[14], demoStories[19]] },
-        { keyword: "Data", raw_keyword: "data", weight: 35, story_count: 4, stories: [demoStories[7], demoStories[18], demoStories[19], demoStories[20]] },
-        { keyword: "Space", raw_keyword: "space", weight: 26, story_count: 3, stories: [demoStories[9], demoStories[14], demoStories[16]] },
+        { keyword: "AI", raw_keyword: "ai", weight: 5, story_count: 5, stories: [demoStories[1], demoStories[3], demoStories[7], demoStories[15], demoStories[20]] },
+        { keyword: "Security", raw_keyword: "security", weight: 5, story_count: 5, stories: [demoStories[4], demoStories[5], demoStories[18], demoStories[20], demoStories[21]] },
+        { keyword: "Programming", raw_keyword: "programming", weight: 5, story_count: 5, stories: [demoStories[0], demoStories[2], demoStories[10], demoStories[14], demoStories[19]] },
+        { keyword: "Open Source", raw_keyword: "open source", weight: 4, story_count: 4, stories: [demoStories[5], demoStories[19], demoStories[20], demoStories[21]] },
+        { keyword: "Developer Tools", raw_keyword: "developer tools", weight: 5, story_count: 5, stories: [demoStories[0], demoStories[2], demoStories[5], demoStories[14], demoStories[19]] },
+        { keyword: "Data", raw_keyword: "data", weight: 4, story_count: 4, stories: [demoStories[7], demoStories[18], demoStories[19], demoStories[20]] },
+        { keyword: "Space", raw_keyword: "space", weight: 3, story_count: 3, stories: [demoStories[9], demoStories[14], demoStories[16]] },
       ],
       notable_stories: demoStories.slice(0, 8),
     },
@@ -362,7 +362,7 @@ function BubbleField({
   return (
     <div className="bubble-field" aria-label="Keyword explorer">
       {items.slice(0, slots.length).map((item, index) => {
-        const size = 48 + (Number(item.weight || 1) / max) * 78;
+        const size = 42 + (Number(item.weight || 1) / max) * 64;
         const isSelected = selectedKeyword === item.keyword;
         return (
           <button
@@ -395,7 +395,6 @@ export default function Dashboard() {
   const [rankBy, setRankBy] = useState("score");
   const [flagFilter, setFlagFilter] = useState("all");
   const [storyPage, setStoryPage] = useState(1);
-  const [openBrief, setOpenBrief] = useState<number | string | null>(1);
   const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
   const [selectedWindowIndex, setSelectedWindowIndex] = useState<number | null>(null);
 
@@ -528,7 +527,6 @@ export default function Dashboard() {
         signalType: "Baseline",
       }));
   const eventBriefs = intelligence.event_briefs || [];
-  const selectedBrief = eventBriefs.find((brief: Row) => brief.id === openBrief) || eventBriefs[0] || {};
   const totalScore = data.stories.reduce((sum, row) => sum + Number(row.score || 0), 0);
   const totalComments = data.stories.reduce((sum, row) => sum + Number(row.num_comments || 0), 0);
   const emergingTopics = (intelligence.ranked_themes || []).slice(0, 5);
@@ -854,14 +852,14 @@ export default function Dashboard() {
               </div>
             )}
           </Panel>
-          <Panel title="Keyword visibility" className="visibility-panel">
+          <Panel title="Keyword evidence" className="visibility-panel">
             <ResponsiveContainer width="100%" height={210}>
               <BarChart data={(intelligence.heading_visibility || []).slice(0, 6)} layout="vertical" margin={{ left: 6, right: 18 }}>
                 <CartesianGrid stroke="rgba(112,151,204,.10)" horizontal={false} />
                 <XAxis type="number" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="keyword" width={108} tick={{ fill: "#c3d2e3", fontSize: 12 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="visibility" name="Visibility" fill={COLORS.cyan} radius={[0, 3, 3, 0]} />
+                <Bar dataKey="visibility" name="Supporting stories" fill={COLORS.cyan} radius={[0, 3, 3, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </Panel>
@@ -887,9 +885,9 @@ export default function Dashboard() {
               </div>
             )}
           </Panel>
-          <Panel title="Keywords explorer" className="keyword-panel">
+          <Panel title="Keyword explorer" className="keyword-panel">
             <div className="interactive-panel-heading">
-              <span>Click a topic to filter stories</span>
+              <span>Recurring concepts supported by at least two stories</span>
               {selectedKeyword && <button type="button" onClick={() => setSelectedKeyword(null)}>Clear filter</button>}
             </div>
             <BubbleField
@@ -926,15 +924,12 @@ export default function Dashboard() {
           action={<span className="verified-badge"><ShieldCheck size={15} /> API-only data boundary</span>}
         />
 
-        <div className="investigation-cases">
+        <div className="investigation-cases" aria-label="Investigation cases">
           {eventBriefs.slice(0, 5).map((brief: Row, index: number) => {
-            const selected = selectedBrief.id === brief.id;
             return (
-              <button
-                type="button"
-                className={selected ? "investigation-case active" : "investigation-case"}
-                aria-pressed={selected}
-                onClick={() => setOpenBrief(brief.id)}
+              <article
+                className="investigation-case"
+                tabIndex={0}
                 key={brief.id}
               >
                 <span className="case-summary-top">
@@ -943,29 +938,30 @@ export default function Dashboard() {
                 </span>
                 <b>{brief.headline_summary || brief.topic}</b>
                 <small>{brief.topic} · {brief.evidence_count || 0} evidence items</small>
-              </button>
+                <div className="case-expanded">
+                  <div className="case-facts">
+                    <span><b>Feed</b>{brief.source_feed || "—"}</span>
+                    <span><b>Triggered by</b>{brief.triggered_by || "—"}</span>
+                    <span><b>Evidence</b>{brief.evidence_count || 0} linked records</span>
+                    <span><b>News</b>{brief.news_aligned ? "Externally aligned" : "Unconfirmed"}</span>
+                  </div>
+                  <p>{brief.summary || "No investigation summary is available."}</p>
+                  <div className="case-tags">
+                    <span>{brief.event_type?.replaceAll("_", " ") || "signal review"} · z {formatNumber(brief.z_score, 1)}</span>
+                    <span>{brief.sentiment_label || "neutral"}</span>
+                    <span>{Math.round(Number(brief.confidence || 0) * 100)}% confidence</span>
+                  </div>
+                </div>
+              </article>
             );
           })}
+          {!eventBriefs.length && (
+            <div className="panel-empty-state compact">
+              <b>No active investigations</b>
+              <span>Evidence cases appear here when a monitored signal crosses the anomaly threshold.</span>
+            </div>
+          )}
         </div>
-
-        <article className="investigation-detail">
-          <div className="investigation-detail-heading">
-            <span>Selected assessment</span>
-            <strong>{selectedBrief.event_type?.replaceAll("_", " ") || "signal review"} · z {formatNumber(selectedBrief.z_score, 1)}</strong>
-          </div>
-          <div className="case-facts">
-            <span><b>Feed</b>{selectedBrief.source_feed || "—"}</span>
-            <span><b>Triggered by</b>{selectedBrief.triggered_by || "—"}</span>
-            <span><b>Evidence</b>{selectedBrief.evidence_count || 0} linked records</span>
-            <span><b>News</b>{selectedBrief.news_aligned ? "Externally aligned" : "Unconfirmed"}</span>
-          </div>
-          <p>{selectedBrief.summary || "No investigation summary is available."}</p>
-          <div className="case-tags">
-            <span>{selectedBrief.topic || "Signal intelligence"}</span>
-            <span>{selectedBrief.sentiment_label || "neutral"}</span>
-            <span>{Math.round(Number(selectedBrief.confidence || 0) * 100)}% confidence</span>
-          </div>
-        </article>
 
         <div className="story-workspace-heading">
           <div>
