@@ -597,6 +597,10 @@ def create_app(
                     """
                 )
             ).mappings().all()
+            story_pool_limit = max(
+                80,
+                settings.max_story_ids * len(settings.hn_story_endpoints),
+            )
             story_rows = conn.execute(
                 text(
                     """
@@ -610,9 +614,10 @@ def create_app(
                 JOIN current_window current
                   ON current.collected_at = s.collected_at
                 ORDER BY s.score DESC, s.num_comments DESC
-                LIMIT 80
+                LIMIT :story_pool_limit
                     """
-                )
+                ),
+                {"story_pool_limit": story_pool_limit},
             ).mappings().all()
             monitoring_row = conn.execute(
                 text(
