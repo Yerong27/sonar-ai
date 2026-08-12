@@ -195,22 +195,21 @@ function makeDemoData(): DashboardData {
         { rank: 5, theme: "Security", score: 3 },
       ],
       heading_visibility: [
-        { keyword: "AI", visibility: 5 }, { keyword: "Tools", visibility: 5 },
-        { keyword: "Data", visibility: 4 }, { keyword: "Programming", visibility: 5 },
-        { keyword: "Security", visibility: 5 },
+        { keyword: "Security & Privacy", visibility: 4 }, { keyword: "Operating Systems", visibility: 4 },
+        { keyword: "AI Platforms", visibility: 3 }, { keyword: "Technology Governance", visibility: 3 },
+        { keyword: "Developer Tooling", visibility: 2 }, { keyword: "Space Systems", visibility: 2 },
       ],
       sentiment_distribution: [
         { label: "positive", count: 3 }, { label: "negative", count: 1 },
         { label: "neutral", count: 4 }, { label: "mixed", count: 2 },
       ],
       keyword_bubbles: [
-        { keyword: "AI", raw_keyword: "ai", weight: 5, story_count: 5, stories: [demoStories[1], demoStories[3], demoStories[7], demoStories[15], demoStories[20]] },
-        { keyword: "Security", raw_keyword: "security", weight: 5, story_count: 5, stories: [demoStories[4], demoStories[5], demoStories[18], demoStories[20], demoStories[21]] },
-        { keyword: "Programming", raw_keyword: "programming", weight: 5, story_count: 5, stories: [demoStories[0], demoStories[2], demoStories[10], demoStories[14], demoStories[19]] },
-        { keyword: "Open Source", raw_keyword: "open source", weight: 4, story_count: 4, stories: [demoStories[5], demoStories[19], demoStories[20], demoStories[21]] },
-        { keyword: "Developer Tools", raw_keyword: "developer tools", weight: 5, story_count: 5, stories: [demoStories[0], demoStories[2], demoStories[5], demoStories[14], demoStories[19]] },
-        { keyword: "Data", raw_keyword: "data", weight: 4, story_count: 4, stories: [demoStories[7], demoStories[18], demoStories[19], demoStories[20]] },
-        { keyword: "Space", raw_keyword: "space", weight: 3, story_count: 3, stories: [demoStories[9], demoStories[14], demoStories[16]] },
+        { keyword: "Security & Privacy", raw_keyword: "security privacy", weight: 4, story_count: 4, stories: [demoStories[4], demoStories[5], demoStories[18], demoStories[20]] },
+        { keyword: "Operating Systems", raw_keyword: "operating systems", weight: 4, story_count: 4, stories: [demoStories[2], demoStories[5], demoStories[11], demoStories[14]] },
+        { keyword: "AI Platforms", raw_keyword: "ai platforms", weight: 3, story_count: 3, stories: [demoStories[1], demoStories[3], demoStories[7]] },
+        { keyword: "Technology Governance", raw_keyword: "technology governance", weight: 3, story_count: 3, stories: [demoStories[7], demoStories[15], demoStories[21]] },
+        { keyword: "Developer Tooling", raw_keyword: "developer tooling", weight: 2, story_count: 2, stories: [demoStories[0], demoStories[19]] },
+        { keyword: "Space Systems", raw_keyword: "space systems", weight: 2, story_count: 2, stories: [demoStories[9], demoStories[16]] },
       ],
       notable_stories: demoStories.slice(0, 8),
     },
@@ -357,28 +356,33 @@ function BubbleField({
   selectedKeyword: string | null;
   onSelectKeyword: (keyword: string | null) => void;
 }) {
-  const slots = [[50, 48], [23, 42], [78, 42], [30, 72], [69, 72], [15, 70], [85, 72]];
-  const max = Math.max(...items.map((item) => Number(item.weight || 1)), 1);
+  const max = Math.max(...items.map((item) => Number(item.story_count || 1)), 1);
   return (
-    <div className="bubble-field" aria-label="Keyword explorer">
-      {items.slice(0, slots.length).map((item, index) => {
-        const size = 42 + (Number(item.weight || 1) / max) * 64;
+    <div className={`bubble-field bubble-count-${Math.min(items.length, 10)}`} aria-label="Keyword explorer">
+      {items.slice(0, 10).map((item, index) => {
         const isSelected = selectedKeyword === item.keyword;
+        const ratio = Number(item.story_count || 1) / max;
+        const size = Math.round(68 + ratio * 34);
         return (
           <button
             type="button"
             className={`bubble-node${index === 0 ? " primary" : ""}${isSelected ? " selected" : ""}`}
             key={item.keyword}
-            style={{ left: `${slots[index][0]}%`, top: `${slots[index][1]}%`, width: size, height: size }}
+            style={{ width: size, height: size }}
             aria-label={`Filter notable stories by ${item.keyword}`}
             aria-pressed={isSelected}
             onClick={() => onSelectKeyword(isSelected ? null : item.keyword)}
           >
             <span>{item.keyword}</span>
-            <small>{item.story_count || 0}</small>
+            <small>{item.story_count || 0} stories</small>
           </button>
         );
       })}
+      {!items.length && (
+        <div className="bubble-empty">
+          No recurring topic has enough supporting stories in this window.
+        </div>
+      )}
     </div>
   );
 }
@@ -852,7 +856,7 @@ export default function Dashboard() {
               </div>
             )}
           </Panel>
-          <Panel title="Keyword evidence" className="visibility-panel">
+          <Panel title="Keyword visibility" className="visibility-panel">
             <ResponsiveContainer width="100%" height={210}>
               <BarChart data={(intelligence.heading_visibility || []).slice(0, 6)} layout="vertical" margin={{ left: 6, right: 18 }}>
                 <CartesianGrid stroke="rgba(112,151,204,.10)" horizontal={false} />
@@ -885,32 +889,34 @@ export default function Dashboard() {
               </div>
             )}
           </Panel>
-          <Panel title="Keyword explorer" className="keyword-panel">
-            <div className="interactive-panel-heading">
-              <span>Recurring concepts supported by at least two stories</span>
-              {selectedKeyword && <button type="button" onClick={() => setSelectedKeyword(null)}>Clear filter</button>}
-            </div>
-            <BubbleField
-              items={intelligence.keyword_bubbles || []}
-              selectedKeyword={selectedKeyword}
-              onSelectKeyword={setSelectedKeyword}
-            />
-          </Panel>
-          <Panel title="Notable stories" className="notable-panel">
-            <div className="interactive-panel-heading">
-              <span>{selectedKeyword ? `Filtered by “${selectedKeyword}”` : "Highest-signal stories"}</span>
-              <b>{matchedStories.length} stories</b>
-            </div>
-            <div className="notable-list">
-              {matchedStories.slice(0, 7).map((story: Row) => (
-                <a href={storyHref(story)} target="_blank" rel="noreferrer" key={story.story_id}>
-                  <span>{story.title}</span>
-                  <small>{formatNumber(story.score)} pts · {formatNumber(story.num_comments)} comments</small>
-                </a>
-              ))}
-              {matchedStories.length === 0 && <p className="empty-filter">No stories match this topic in the current window.</p>}
-            </div>
-          </Panel>
+          <div className="keyword-evidence-row">
+            <Panel title="Keyword explorer" className="keyword-panel">
+              <div className="interactive-panel-heading">
+                <span>Recurring topics supported by at least two stories</span>
+                {selectedKeyword && <button type="button" onClick={() => setSelectedKeyword(null)}>Clear filter</button>}
+              </div>
+              <BubbleField
+                items={intelligence.keyword_bubbles || []}
+                selectedKeyword={selectedKeyword}
+                onSelectKeyword={setSelectedKeyword}
+              />
+            </Panel>
+            <Panel title="Notable stories" className="notable-panel">
+              <div className="interactive-panel-heading">
+                <span>{selectedKeyword ? `Evidence for “${selectedKeyword}”` : "Highest-signal stories"}</span>
+                <b>{matchedStories.length} stories</b>
+              </div>
+              <div className="notable-list">
+                {matchedStories.slice(0, 7).map((story: Row) => (
+                  <a href={storyHref(story)} target="_blank" rel="noreferrer" key={story.story_id}>
+                    <span>{story.title}</span>
+                    <small>{formatNumber(story.score)} pts · {formatNumber(story.num_comments)} comments</small>
+                  </a>
+                ))}
+                {matchedStories.length === 0 && <p className="empty-filter">No stories match this topic in the current window.</p>}
+              </div>
+            </Panel>
+          </div>
         </div>
       </section>
       )}

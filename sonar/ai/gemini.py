@@ -70,13 +70,15 @@ CRITICAL INSTRUCTIONS:
 - top_topics must be 3–5 stable conceptual themes supported by multiple supplied stories.
 - top_topics must be concise labels (2–4 words each, e.g. "AI Model Releases", "Cloud Pricing").
 - Topics must describe the subject matter, never the feed mechanics, monitoring process, or engagement measurements.
-- Return 5–10 keyword_signals only when each concept is central to at least two supplied stories.
-- keyword_signals must contain concrete entities, products, technologies, systems, protocols, or technical subject-matter noun phrases.
-- Do not return grammatical connectors, actions, qualities, or fragments of a title as concepts.
-- aliases must include only genuine alternative names, abbreviations, or spelling variants useful for matching other stories.
-- supporting_story_ids must identify at least two supplied stories where the concept is central.
-- Omit single-story entities and concepts. They may be notable stories, but they are not recurring landscape signals.
-- Prefer distinct concepts with different evidence sets; do not return broad and narrow synonyms supported by the same stories.
+- Build 8–12 topic_signals by grouping related stories into meaningful recurring subject areas.
+- A topic signal is a cross-story theme such as "AI Agent Infrastructure", "Technology Regulation", or "Privacy and Identity". It is not limited to a repeated company or product name.
+- Each topic label must be a specific 2–5 word noun phrase that explains what the supporting stories are collectively about.
+- Do not return grammatical connectors, actions, qualities, title fragments, generic words such as "Technology", or a single named entity unless multiple stories genuinely discuss it as a shared subject.
+- aliases may include only genuine alternative names, abbreviations, or closely related matching phrases useful for finding more stories in the same topic.
+- supporting_story_ids must contain 2–6 exact supplied IDs whose stories substantively belong to the topic, even when their titles use different wording.
+- Omit single-story topics. Cover the breadth of the supplied landscape instead of collapsing everything into a few dominant brands.
+- Prefer clusters with 3 or more supporting stories, but retain useful 2-story clusters when they represent a distinct recurring subject.
+- Prefer distinct topics with different evidence sets; do not return broad and narrow versions of the same cluster.
 - Never invent IDs or aliases.
 - bullet_insights must each be a single sentence with a maximum of 18 words.
 - dominant_theme must be 3–5 words.
@@ -87,11 +89,11 @@ CRITICAL INSTRUCTIONS:
 Required JSON schema:
 {{
   "headline_summary": "string — a concise monitoring brief headline, max 12 words",
-  "keyword_signals": [
+  "topic_signals": [
     {{
-      "concept": "string — a concrete 1–4 word concept",
-      "aliases": ["string — genuine matching aliases only"],
-      "supporting_story_ids": ["string — exact supplied story IDs where central"]
+      "concept": "string — a specific 2–5 word cross-story topic",
+      "aliases": ["string — genuine topic matching phrases only"],
+      "supporting_story_ids": ["string — 2–6 exact supplied story IDs in this topic"]
     }}
   ],
   "top_topics": ["string — max 5, each 2–4 words"],

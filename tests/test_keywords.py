@@ -16,7 +16,7 @@ def _story(story_id: str, title: str, score: int = 100) -> dict:
 
 def test_model_concepts_expand_across_the_full_story_window() -> None:
     payload = {
-        "keyword_signals": [
+        "topic_signals": [
             {
                 "concept": "Large Language Models",
                 "aliases": ["LLM", "LLMs"],
@@ -51,7 +51,7 @@ def test_model_concepts_expand_across_the_full_story_window() -> None:
 
 def test_single_story_concepts_are_not_presented_as_recurring_signals() -> None:
     payload = {
-        "keyword_signals": [
+        "topic_signals": [
             {
                 "concept": "One-off Product",
                 "aliases": [],
@@ -70,3 +70,23 @@ def test_no_title_frequency_fallback_is_created_without_model_concepts() -> None
     stories = [_story("1", "Show developers a useful command")]
 
     assert _expanded_keyword_signals({}, stories) == []
+
+
+def test_legacy_keyword_signals_remain_readable() -> None:
+    payload = {
+        "keyword_signals": [
+            {
+                "concept": "Developer Tooling",
+                "aliases": [],
+                "supporting_story_ids": ["1", "2"],
+            }
+        ]
+    }
+
+    signals = _expanded_keyword_signals(
+        payload,
+        [_story("1", "A new terminal workflow"), _story("2", "Debugging build tools")],
+    )
+
+    assert signals[0]["keyword"] == "Developer Tooling"
+    assert signals[0]["story_count"] == 2

@@ -2,7 +2,7 @@ from sonar.ai.gemini import GeminiExplainer
 
 
 class _Response:
-    text = '{"keyword_signals": []}'
+    text = '{"topic_signals": []}'
 
 
 class _RecordingModel:
@@ -14,7 +14,7 @@ class _RecordingModel:
         return _Response()
 
 
-def test_monitoring_prompt_renders_keyword_signal_schema() -> None:
+def test_monitoring_prompt_renders_topic_signal_schema() -> None:
     explainer = GeminiExplainer.__new__(GeminiExplainer)
     explainer.enabled = True
     explainer.model = _RecordingModel()
@@ -24,8 +24,10 @@ def test_monitoring_prompt_renders_keyword_signal_schema() -> None:
         [{"story_id": "101", "title": "A concrete technical story"}]
     )
 
-    assert result == {"keyword_signals": []}
+    assert result == {"topic_signals": []}
+    assert '"topic_signals": [' in explainer.model.prompt
     assert '"concept": "string' in explainer.model.prompt
     assert '"aliases": [' in explainer.model.prompt
     assert '"supporting_story_ids": [' in explainer.model.prompt
-    assert "at least two supplied stories" in explainer.model.prompt
+    assert "2–6 exact supplied IDs" in explainer.model.prompt
+    assert "grouping related stories" in explainer.model.prompt

@@ -97,8 +97,10 @@ def _model_keyword_candidates(
     *,
     limit: int = 16,
 ) -> list[dict[str, Any]]:
-    """Read model-selected concepts without inventing title-frequency keywords."""
-    raw_signals = monitoring_payload.get("keyword_signals")
+    """Read model-selected topic clusters without inventing title-frequency labels."""
+    raw_signals = monitoring_payload.get("topic_signals")
+    if not isinstance(raw_signals, list):
+        raw_signals = monitoring_payload.get("keyword_signals")
     if not isinstance(raw_signals, list):
         raw_signals = monitoring_payload.get("top_keywords")
     if not isinstance(raw_signals, list):
@@ -175,7 +177,7 @@ def _expanded_keyword_signals(
     limit: int = 10,
     min_support: int = 2,
 ) -> list[dict[str, Any]]:
-    """Validate model concepts against the full window and keep recurring signals."""
+    """Validate model topic clusters against the full window and keep recurring signals."""
     signals: list[dict[str, Any]] = []
     for candidate in _model_keyword_candidates(monitoring_payload):
         concept = candidate["concept"]
