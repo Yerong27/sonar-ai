@@ -57,6 +57,66 @@ News context:
 """
         return self._generate_json(prompt)
 
+    def _review_topic_clusters(self, stories: list[dict], summary: dict) -> dict:
+        if not summary or not isinstance(summary.get("topic_signals"), list):
+            return summary
+
+        candidates = summary.get("topic_signals") or []
+        if not candidates:
+            return summary
+
+        validation_prompt = f"""
+Return only valid JSON. No markdown, no explanation.
+You are the independent quality reviewer for proposed Hacker News topic clusters.
+
+Reject a cluster unless every included story shares one concrete, discriminating subject.
+A broad professional domain is not a topic. For example, unrelated language releases,
+compiler implementations, and coding practices do not become one trend merely because
+they are all software engineering. Likewise, chip-company business news, local inference,
+and data-center finance do not become one trend merely because they involve hardware.
+
+REVIEW RULES:
+- Judge the supplied titles independently; do not trust the proposed confidence.
+- Keep only clusters with at least 3 stories after review.
+- The final 2–5 word label must accurately predict what every supporting story discusses.
+- Reject clusters connected only by a broad industry, profession, or generic technology category.
+- Remove an individual story when it is only tangentially related.
+- A story may appear in at most one accepted cluster.
+- When two clusters overlap, retain only the narrower, more coherent cluster.
+- You may rename a retained cluster, but may not add stories or invent a new cluster.
+- confidence must be conservative. Use 1.0 only for near-duplicate coverage of the same event.
+- Return an empty accepted_topics list when no proposal meets the standard.
+
+Required JSON schema:
+{{
+  "accepted_topics": [
+    {{
+      "concept": "string — specific 2–5 word topic",
+      "aliases": ["string — specific 2–5 word equivalent phrases"],
+      "supporting_story_ids": ["string — at least 3 exact IDs retained from one proposal"],
+      "confidence": 0.0
+    }}
+  ]
+}}
+
+Stories:
+{json.dumps([{"story_id": story.get("story_id"), "title": story.get("title")} for story in stories])}
+
+Proposed clusters:
+{json.dumps(candidates)}
+"""
+        validated = self._generate_json(validation_prompt)
+        accepted = validated.get("accepted_topics") if isinstance(validated, dict) else None
+        summary["topic_signals"] = accepted if isinstance(accepted, list) else []
+        summary["top_topics"] = [
+            str(item.get("concept"))
+            for item in summary["topic_signals"][:5]
+            if isinstance(item, dict) and item.get("concept")
+        ]
+        if summary["top_topics"]:
+            summary["dominant_theme"] = summary["top_topics"][0]
+        return summary
+
     def summarize_monitoring_snapshot(self, stories: list[dict]) -> dict | None:
         if not self.enabled or not self.model or not stories:
             return None
@@ -117,7 +177,10 @@ Required JSON schema:
 Recent stories:
 {json.dumps(stories)}
 """
-        return self._generate_json(prompt)
+        summary = self._generate_json(prompt)
+        if not summary:
+            return summary
+        return self._review_topic_clusters(stories, summary)
 
     def _generate_json(self, prompt: str) -> dict | None:
         try:
