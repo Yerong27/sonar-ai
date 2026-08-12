@@ -711,6 +711,8 @@ export default function Dashboard() {
           return selectedTokens.some((token) => title.includes(token));
         }))
     : (intelligence.notable_stories || data.stories);
+  const matchedStoryScore = matchedStories.reduce((sum: number, story: Row) => sum + Number(story.score || 0), 0);
+  const matchedStoryComments = matchedStories.reduce((sum: number, story: Row) => sum + Number(story.num_comments || 0), 0);
   const statusRows = [
     { icon: Wifi, label: "Data stream", detail: data.mode === "live" ? "Healthy" : "Demo snapshot", value: data.mode === "live" ? "Live" : "Ready" },
     { icon: Radio, label: "Coverage", detail: "Hacker News feeds", value: `${data.overview.feed_summary?.length || 2} feeds` },
@@ -991,10 +993,52 @@ export default function Dashboard() {
               <span>{landscapeBrief?.evidence_count || 0} stories analyzed</span>
             </div>
           </article>
-          <div className="intelligence-analysis-row">
-            <Panel title="Keyword explorer" className="keyword-panel">
+          <div className="intelligence-summary-row">
+            <Panel title="Ranked themes" className="theme-panel">
+              {emergingTopics.length ? (
+                <ol>
+                  {emergingTopics.map((item: Row) => (
+                    <li key={item.theme}>
+                      <span>{String(item.rank).padStart(2, "0")}</span>
+                      <b>{item.theme}</b>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <div className="panel-empty-state compact">
+                  <b>No themes classified yet</b>
+                  <span>The next Gemini landscape summary will populate this ranking.</span>
+                </div>
+              )}
+            </Panel>
+            <Panel title="Signal sentiment" className="sentiment-panel">
+              {hasSentiment ? (
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={sentimentData}>
+                    <CartesianGrid stroke="rgba(112,151,204,.10)" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={30} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Bar dataKey="count" name="Share" radius={[3, 3, 0, 0]}>
+                      {sentimentData.map((item: Row) => (
+                        <Cell key={item.label} fill={{ positive: COLORS.green, negative: COLORS.red, neutral: "#7f8da5", mixed: COLORS.orange }[item.label as string] || COLORS.cyan} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="panel-empty-state compact">
+                  <b>No sentiment distribution yet</b>
+                  <span>The next semantic scan will classify the current story landscape.</span>
+                </div>
+              )}
+            </Panel>
+          </div>
+          <section className="topic-evidence-workspace">
+            <div className="keyword-workspace">
+              <h3 className="panel-title">Keyword explorer</h3>
               <div className="interactive-panel-heading">
-                <span>{topicClusters.length < 3 ? "Only concepts supported by multiple stories are shown" : "Model-selected concepts · expanded across the current story window · bubble area = HN attention"}</span>
+                <span>{topicClusters.length < 3 ? "Only concepts supported by multiple stories are shown" : "Select a concept to inspect its supporting stories · bubble area = HN attention"}</span>
                 {selectedKeyword && <button type="button" onClick={() => setSelectedKeyword(null)}>Clear filter</button>}
               </div>
               <TopicBubbleChart
@@ -1002,64 +1046,31 @@ export default function Dashboard() {
                 selectedKeyword={selectedKeyword}
                 onSelectKeyword={setSelectedKeyword}
               />
-            </Panel>
-            <div className="intelligence-side-stack">
-              <Panel title="Ranked themes" className="theme-panel">
-                {emergingTopics.length ? (
-                  <ol>
-                    {emergingTopics.map((item: Row) => (
-                      <li key={item.theme}>
-                        <span>{String(item.rank).padStart(2, "0")}</span>
-                        <b>{item.theme}</b>
-                      </li>
-                    ))}
-                  </ol>
-                ) : (
-                  <div className="panel-empty-state compact">
-                    <b>No themes classified yet</b>
-                    <span>The next Gemini landscape summary will populate this ranking.</span>
-                  </div>
-                )}
-              </Panel>
-              <Panel title="Signal sentiment" className="sentiment-panel">
-                {hasSentiment ? (
-                  <ResponsiveContainer width="100%" height={150}>
-                    <BarChart data={sentimentData}>
-                      <CartesianGrid stroke="rgba(112,151,204,.10)" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={30} />
-                      <Tooltip content={<ChartTooltip />} />
-                      <Bar dataKey="count" name="Share" radius={[3, 3, 0, 0]}>
-                        {sentimentData.map((item: Row) => (
-                          <Cell key={item.label} fill={{ positive: COLORS.green, negative: COLORS.red, neutral: "#7f8da5", mixed: COLORS.orange }[item.label as string] || COLORS.cyan} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="panel-empty-state compact">
-                    <b>No sentiment distribution yet</b>
-                    <span>The next semantic scan will classify the current story landscape.</span>
-                  </div>
-                )}
-              </Panel>
             </div>
-          </div>
-          <Panel title="Notable stories" className="notable-panel">
-            <div className="interactive-panel-heading">
-              <span>{selectedKeyword ? `Evidence for “${selectedKeyword}”` : "Highest-signal stories"}</span>
-              <b>{matchedStories.length} stories</b>
+            <div className="evidence-workspace">
+              <div className="evidence-workspace-heading">
+                <div>
+                  <h3 className="panel-title">Notable stories</h3>
+                  <span>{selectedKeyword ? `Evidence for “${selectedKeyword}”` : "Highest-signal stories"}</span>
+                </div>
+                <b>{matchedStories.length} stories</b>
+              </div>
+              <dl className="evidence-summary">
+                <div><dt>Coverage</dt><dd>{matchedStories.length}</dd></div>
+                <div><dt>HN score</dt><dd>{formatNumber(matchedStoryScore)}</dd></div>
+                <div><dt>Comments</dt><dd>{formatNumber(matchedStoryComments)}</dd></div>
+              </dl>
+              <div className="notable-list evidence-list">
+                {matchedStories.slice(0, 8).map((story: Row) => (
+                  <a href={storyHref(story)} target="_blank" rel="noreferrer" key={story.story_id}>
+                    <span>{story.title}</span>
+                    <small>{formatNumber(story.score)} pts · {formatNumber(story.num_comments)} comments</small>
+                  </a>
+                ))}
+                {matchedStories.length === 0 && <p className="empty-filter">No stories match this topic in the current window.</p>}
+              </div>
             </div>
-            <div className="notable-list notable-list-wide">
-              {matchedStories.slice(0, 8).map((story: Row) => (
-                <a href={storyHref(story)} target="_blank" rel="noreferrer" key={story.story_id}>
-                  <span>{story.title}</span>
-                  <small>{formatNumber(story.score)} pts · {formatNumber(story.num_comments)} comments</small>
-                </a>
-              ))}
-              {matchedStories.length === 0 && <p className="empty-filter">No stories match this topic in the current window.</p>}
-            </div>
-          </Panel>
+          </section>
         </div>
       </section>
       )}
