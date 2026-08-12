@@ -784,7 +784,7 @@ def create_app(
             payload = normalize_brief_payload(_json_loads(row["response_json"], {}))
             topic = str(payload.get("topic") or row["metric_name"] or "").strip()
             sentiment = str(payload.get("sentiment_label") or "neutral").strip().lower()
-            if topic and not monitoring_topics:
+            if topic and not monitoring_payload:
                 theme_counter[topic] += 3
             sentiment_counter[sentiment or "neutral"] += 1
 
@@ -831,21 +831,13 @@ def create_app(
         notable_stories = notable_stories[:8]
         keyword_signals = _expanded_keyword_signals(monitoring_payload, story_pool)
 
-        ranked_themes = (
-            [
-                {
-                    "theme": signal["display_keyword"],
-                    "rank": index + 1,
-                    "score": signal["story_count"],
-                }
-                for index, signal in enumerate(keyword_signals)
-            ]
-            if monitoring_payload
-            else [
-                {"theme": theme, "rank": index + 1, "score": score}
-                for index, (theme, score) in enumerate(theme_counter.most_common(8))
-            ]
-        )
+        # Themes are the model's high-level landscape summary. Keyword signals
+        # below are concrete, title-grounded concepts. Keeping the two sources
+        # separate prevents two charts from repeating the same information.
+        ranked_themes = [
+            {"theme": theme, "rank": index + 1, "score": score}
+            for index, (theme, score) in enumerate(theme_counter.most_common(8))
+        ]
         topic_bubbles = [
             {
                 "keyword": signal["display_keyword"],

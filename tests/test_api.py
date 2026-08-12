@@ -445,6 +445,10 @@ def test_ai_intelligence_uses_monitoring_summary_without_anomalies(
     )
     assert intelligence["latest_brief"]["evidence_count"] == 8
     assert intelligence["ranked_themes"][0]["theme"] == "AI Infrastructure"
+    assert [item["theme"] for item in intelligence["ranked_themes"]] == [
+        "AI Infrastructure",
+        "Developer Tools",
+    ]
     assert intelligence["sentiment_distribution"][0] == {
         "label": "positive",
         "count": 0.5,
