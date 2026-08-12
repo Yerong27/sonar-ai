@@ -70,7 +70,9 @@ CRITICAL INSTRUCTIONS:
 - top_topics must be 3–5 stable conceptual themes supported by multiple supplied stories.
 - top_topics must be concise labels (2–4 words each, e.g. "AI Model Releases", "Cloud Pricing").
 - Topics must describe the subject matter, never the feed mechanics, monitoring process, or engagement measurements.
-- Build 8–12 topic_signals by grouping related stories into meaningful recurring subject areas.
+- Build topic_signals by grouping related stories into recurring subject areas. top_topics is a short executive summary; topic_signals must cover the wider landscape for exploration.
+- When at least 20 stories are supplied, return 8–10 topic_signals. Do not stop after restating the 3–5 top_topics.
+- When fewer than 20 stories are supplied, return as many evidence-backed topic_signals as the input supports, up to 10.
 - A topic signal is a cross-story theme such as "AI Agent Infrastructure", "Technology Regulation", or "Privacy and Identity". It is not limited to a repeated company or product name.
 - Each topic label must be a specific 2–5 word noun phrase that explains what the supporting stories are collectively about.
 - Do not return grammatical connectors, actions, qualities, title fragments, generic words such as "Technology", or a single named entity unless multiple stories genuinely discuss it as a shared subject.

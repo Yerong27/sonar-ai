@@ -31,3 +31,5 @@ def test_monitoring_prompt_renders_topic_signal_schema() -> None:
     assert '"supporting_story_ids": [' in explainer.model.prompt
     assert "2–6 exact supplied IDs" in explainer.model.prompt
     assert "grouping related stories" in explainer.model.prompt
+    assert "return 8–10 topic_signals" in explainer.model.prompt
+    assert "Do not stop after restating" in explainer.model.prompt
