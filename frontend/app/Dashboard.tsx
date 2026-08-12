@@ -194,16 +194,11 @@ function makeDemoData(): DashboardData {
         { rank: 4, theme: "Developer Tools", score: 4 },
         { rank: 5, theme: "Security", score: 3 },
       ],
-      heading_visibility: [
-        { keyword: "Security & Privacy", visibility: 4 }, { keyword: "Operating Systems", visibility: 4 },
-        { keyword: "AI Platforms", visibility: 3 }, { keyword: "Technology Governance", visibility: 3 },
-        { keyword: "Developer Tooling", visibility: 2 }, { keyword: "Space Systems", visibility: 2 },
-      ],
       sentiment_distribution: [
         { label: "positive", count: 3 }, { label: "negative", count: 1 },
         { label: "neutral", count: 4 }, { label: "mixed", count: 2 },
       ],
-      keyword_bubbles: [
+      topic_clusters: [
         { keyword: "Security & Privacy", raw_keyword: "security privacy", weight: 4, story_count: 4, stories: [demoStories[4], demoStories[5], demoStories[18], demoStories[20]] },
         { keyword: "Operating Systems", raw_keyword: "operating systems", weight: 4, story_count: 4, stories: [demoStories[2], demoStories[5], demoStories[11], demoStories[14]] },
         { keyword: "AI Platforms", raw_keyword: "ai platforms", weight: 3, story_count: 3, stories: [demoStories[1], demoStories[3], demoStories[7]] },
@@ -677,7 +672,8 @@ export default function Dashboard() {
   const selectedWindowStories = selectedWindowIndex === null
     ? []
     : data.stories.slice(selectedWindowIndex % Math.max(data.stories.length - 2, 1), (selectedWindowIndex % Math.max(data.stories.length - 2, 1)) + 3);
-  const selectedKeywordItem = (intelligence.keyword_bubbles || []).find(
+  const topicClusters = intelligence.topic_clusters || intelligence.keyword_bubbles || [];
+  const selectedKeywordItem = topicClusters.find(
     (item: Row) => item.keyword === selectedKeyword,
   );
   const selectedTokens = String(
@@ -971,31 +967,6 @@ export default function Dashboard() {
               <span>{landscapeBrief?.evidence_count || 0} stories analyzed</span>
             </div>
           </article>
-          <Panel title="Ranked themes" className="theme-panel">
-            {(intelligence.ranked_themes || []).length ? (
-              <ol>
-                {(intelligence.ranked_themes || []).slice(0, 6).map((item: Row) => (
-                  <li key={item.theme}><span>{String(item.rank).padStart(2, "0")}</span><b>{item.theme}</b><i>{item.score}</i></li>
-                ))}
-              </ol>
-            ) : (
-              <div className="panel-empty-state compact">
-                <b>No themes classified yet</b>
-                <span>The next Gemini landscape summary will populate this ranking.</span>
-              </div>
-            )}
-          </Panel>
-          <Panel title="Topic visibility" className="visibility-panel">
-            <ResponsiveContainer width="100%" height={210}>
-              <BarChart data={(intelligence.heading_visibility || []).slice(0, 6)} layout="vertical" margin={{ left: 6, right: 18 }}>
-                <CartesianGrid stroke="rgba(112,151,204,.10)" horizontal={false} />
-                <XAxis type="number" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="keyword" width={108} tick={{ fill: "#c3d2e3", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="visibility" name="Supporting stories" fill={COLORS.cyan} radius={[0, 3, 3, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </Panel>
           <Panel title="Signal sentiment" className="sentiment-panel">
             {hasSentiment ? (
               <ResponsiveContainer width="100%" height={210}>
@@ -1021,11 +992,11 @@ export default function Dashboard() {
           <div className="keyword-evidence-row">
             <Panel title="Topic landscape" className="keyword-panel">
               <div className="interactive-panel-heading">
-                <span>Bubble area = total HN attention · brightness = story coverage</span>
+                <span>Only coherent topics with at least three supporting stories are shown · bubble area = total HN attention</span>
                 {selectedKeyword && <button type="button" onClick={() => setSelectedKeyword(null)}>Clear filter</button>}
               </div>
               <TopicBubbleChart
-                items={intelligence.keyword_bubbles || []}
+                items={topicClusters}
                 selectedKeyword={selectedKeyword}
                 onSelectKeyword={setSelectedKeyword}
               />

@@ -310,7 +310,7 @@ def test_read_endpoints_return_seeded_data(database: Database) -> None:
     assert intelligence["event_briefs"][0]["headline_summary"] == (
         "AI infrastructure story volume spiked"
     )
-    assert intelligence["ranked_themes"][0]["theme"] == "AI Infrastructure"
+    assert intelligence["ranked_themes"] == []
     assert intelligence["sentiment_distribution"][2]["label"] == "neutral"
     assert intelligence["keyword_bubbles"] == []
     assert intelligence["notable_stories"][0]["title"] == "Example AI story"
@@ -352,6 +352,28 @@ def test_ai_intelligence_uses_monitoring_summary_without_anomalies(
                     created_at, permalink, url, collected_at, monitor_gap_flag,
                     gap_duration_minutes
                 ) VALUES (
+                    :story_id, 'topstories', :title, 'morgan', 160, 52,
+                    :created_at, :permalink, :url, :collected_at, 0, NULL
+                )
+                """
+            ),
+            {
+                "story_id": "monitor-3",
+                "title": "Open AI infrastructure reaches local developers",
+                "created_at": now,
+                "permalink": "https://news.ycombinator.com/item?id=monitor-3",
+                "url": "https://example.com/local-ai",
+                "collected_at": now,
+            },
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO hn_story_snapshots (
+                    story_id, source_feed, title, author, score, num_comments,
+                    created_at, permalink, url, collected_at, monitor_gap_flag,
+                    gap_duration_minutes
+                ) VALUES (
                     :story_id, 'newstories', :title, 'riley', 180, 64,
                     :created_at, :permalink, :url, :collected_at, 0, NULL
                 )
@@ -378,21 +400,24 @@ def test_ai_intelligence_uses_monitoring_summary_without_anomalies(
                 "response_json": json.dumps(
                     {
                         "headline_summary": "Open AI infrastructure leads Hacker News",
-                        "keyword_signals": [
+                        "topic_signals": [
                             {
                                 "concept": "AI Infrastructure",
-                                "aliases": ["AI infrastructure"],
-                                "supporting_story_ids": ["monitor-1"],
+                                "aliases": ["Open AI Infrastructure"],
+                                "supporting_story_ids": ["monitor-1", "monitor-2", "monitor-3"],
+                                "confidence": 0.91,
                             },
                             {
                                 "concept": "Open Source",
-                                "aliases": ["open source"],
+                                "aliases": ["Open Source Software"],
                                 "supporting_story_ids": [],
+                                "confidence": 0.8,
                             },
                             {
                                 "concept": "Unsupported concept",
                                 "aliases": [],
                                 "supporting_story_ids": [],
+                                "confidence": 0.2,
                             },
                         ],
                         "top_topics": ["AI Infrastructure", "Developer Tools"],
@@ -427,11 +452,12 @@ def test_ai_intelligence_uses_monitoring_summary_without_anomalies(
     assert {item["keyword"] for item in intelligence["keyword_bubbles"]} == {
         "AI Infrastructure",
     }
+    assert intelligence["topic_clusters"] == intelligence["keyword_bubbles"]
     story_counts = {
         item["keyword"]: item["story_count"]
         for item in intelligence["keyword_bubbles"]
     }
-    assert story_counts == {"AI Infrastructure": 2}
+    assert story_counts == {"AI Infrastructure": 3}
     topic = intelligence["keyword_bubbles"][0]
     assert topic["signal_strength"] > 0
     assert topic["discussion_intensity"] > 0

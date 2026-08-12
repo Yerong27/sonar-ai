@@ -67,20 +67,21 @@ You are a monitoring system analyst summarizing the current Hacker News landscap
 
 CRITICAL INSTRUCTIONS:
 - headline_summary must read like a monitoring brief title (max 12 words). NOT an essay introduction.
-- top_topics must be 3–5 stable conceptual themes supported by multiple supplied stories.
+- First cluster the supplied stories by a concrete shared subject. Name a topic only after its supporting stories have been selected.
+- top_topics must be drawn from the validated topic_signals and contain no more than 5 concise labels.
 - top_topics must be concise labels (2–4 words each, e.g. "AI Model Releases", "Cloud Pricing").
 - Topics must describe the subject matter, never the feed mechanics, monitoring process, or engagement measurements.
-- Build topic_signals by grouping related stories into recurring subject areas. top_topics is a short executive summary; topic_signals must cover the wider landscape for exploration.
-- When at least 20 stories are supplied, return exactly 10 topic_signals. Do not stop after restating the 3–5 top_topics.
-- When fewer than 20 stories are supplied, return as many evidence-backed topic_signals as the input supports, up to 10.
+- Return between 3 and 8 topic_signals only when the supplied stories justify that many. Return fewer, or an empty list, rather than forcing unrelated stories together.
+- Each topic_signal must contain at least 3 supplied stories whose central subject is genuinely the same.
+- Assign a story to at most one topic_signal. Put stories that do not belong to a coherent recurring topic in unclustered_story_ids.
+- Do not create a topic merely to cover every story or to reach a target count.
 - A topic signal is a cross-story theme such as "AI Agent Infrastructure", "Technology Regulation", or "Privacy and Identity". It is not limited to a repeated company or product name.
 - Each topic label must be a specific 2–5 word noun phrase that explains what the supporting stories are collectively about.
 - Do not return grammatical connectors, actions, qualities, title fragments, generic words such as "Technology", or a single named entity unless multiple stories genuinely discuss it as a shared subject.
-- aliases may include only genuine alternative names, abbreviations, or closely related matching phrases useful for finding more stories in the same topic.
-- supporting_story_ids must contain 2–6 exact supplied IDs whose stories substantively belong to the topic, even when their titles use different wording.
-- Omit single-story topics. Cover the breadth of the supplied landscape instead of collapsing everything into a few dominant brands.
-- Prefer clusters with 3 or more supporting stories, but retain useful 2-story clusters when they represent a distinct recurring subject.
-- Prefer distinct topics with different evidence sets; do not return broad and narrow versions of the same cluster.
+- aliases may include only specific 2–5 word alternative phrases that describe the same subject and are useful for matching additional story titles.
+- supporting_story_ids must contain at least 3 exact supplied IDs whose stories substantively belong to the topic.
+- confidence is the probability from 0 to 1 that every supporting story belongs to the same coherent subject; use a conservative value.
+- Topic evidence sets must be distinct. Do not return broad and narrow versions of the same cluster.
 - Never invent IDs or aliases.
 - bullet_insights must each be a single sentence with a maximum of 18 words.
 - dominant_theme must be 3–5 words.
@@ -95,9 +96,11 @@ Required JSON schema:
     {{
       "concept": "string — a specific 2–5 word cross-story topic",
       "aliases": ["string — genuine topic matching phrases only"],
-      "supporting_story_ids": ["string — 2–6 exact supplied story IDs in this topic"]
+      "supporting_story_ids": ["string — at least 3 exact supplied story IDs in this topic"],
+      "confidence": 0.0
     }}
   ],
+  "unclustered_story_ids": ["string — exact supplied IDs not assigned to a coherent recurring topic"],
   "top_topics": ["string — max 5, each 2–4 words"],
   "dominant_theme": "string — the single most prominent theme in 3–5 words",
   "sentiment_distribution": {{

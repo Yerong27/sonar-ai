@@ -31,10 +31,11 @@ def test_monitoring_prompt_renders_topic_signal_schema() -> None:
     assert '"concept": "string' in explainer.model.prompt
     assert '"aliases": [' in explainer.model.prompt
     assert '"supporting_story_ids": [' in explainer.model.prompt
-    assert "2–6 exact supplied IDs" in explainer.model.prompt
-    assert "grouping related stories" in explainer.model.prompt
-    assert "return exactly 10 topic_signals" in explainer.model.prompt
-    assert "Do not stop after restating" in explainer.model.prompt
+    assert "at least 3 exact supplied story IDs" in explainer.model.prompt
+    assert "First cluster the supplied stories" in explainer.model.prompt
+    assert "Return between 3 and 8 topic_signals" in explainer.model.prompt
+    assert "unclustered_story_ids" in explainer.model.prompt
+    assert "Assign a story to at most one topic_signal" in explainer.model.prompt
     assert explainer.model.generation_config == {
         "response_mime_type": "application/json",
         "max_output_tokens": 4096,
