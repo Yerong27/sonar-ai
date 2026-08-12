@@ -342,6 +342,18 @@ function ChartTooltip({ active, payload, label }: Row) {
   );
 }
 
+function StoryEngagementTooltip({ active, payload }: Row) {
+  if (!active || !payload?.length) return null;
+  const story = payload[0]?.payload || {};
+  return (
+    <div className="chart-tooltip engagement-tooltip">
+      <strong>{story.title || "Story"}</strong>
+      <span style={{ color: COLORS.cyan }}>HN score: {formatNumber(story.score || 0)}</span>
+      <span style={{ color: COLORS.orange }}>Comments: {formatNumber(story.comments || 0)}</span>
+    </div>
+  );
+}
+
 const TOPIC_COLORS = ["#42c8ee", "#3f88d9", "#386fc3", "#407acb", "#327caf", "#4777bc", "#2f659f", "#4a74a8", "#32688d", "#3a79a1"];
 
 function bubbleSignalStrength(item: Row) {
@@ -445,7 +457,7 @@ function TopicBubbleChart({
   onSelectKeyword: (keyword: string | null) => void;
 }) {
   const width = 720;
-  const height = 300;
+  const height = 240;
   const nodes = useMemo(() => packTopicBubbles(items, width, height), [items]);
   const maxCoverage = Math.max(...items.map((item) => Number(item.story_count || 0)), 1);
   if (items.length > 0 && items.length < 3) {
@@ -713,6 +725,12 @@ export default function Dashboard() {
     : (intelligence.notable_stories || data.stories);
   const matchedStoryScore = matchedStories.reduce((sum: number, story: Row) => sum + Number(story.score || 0), 0);
   const matchedStoryComments = matchedStories.reduce((sum: number, story: Row) => sum + Number(story.num_comments || 0), 0);
+  const engagementData = (intelligence.notable_stories || data.stories).slice(0, 14).map((story: Row) => ({
+    title: story.title,
+    score: Number(story.score || 0),
+    comments: Number(story.num_comments || 0),
+    attention: Math.max(1, Number(story.score || 0) + Number(story.num_comments || 0)),
+  }));
   const statusRows = [
     { icon: Wifi, label: "Data stream", detail: data.mode === "live" ? "Healthy" : "Demo snapshot", value: data.mode === "live" ? "Live" : "Ready" },
     { icon: Radio, label: "Coverage", detail: "Hacker News feeds", value: `${data.overview.feed_summary?.length || 2} feeds` },
@@ -997,12 +1015,21 @@ export default function Dashboard() {
             <Panel title="Ranked themes" className="theme-panel">
               {emergingTopics.length ? (
                 <ol>
-                  {emergingTopics.map((item: Row) => (
+                  {emergingTopics.map((item: Row, index: number) => {
+                    const score = Number(item.score || 0);
+                    const prominence = score > 0
+                      ? (score / maxTopicScore) * 100
+                      : ((emergingTopics.length - index) / emergingTopics.length) * 100;
+                    return (
                     <li key={item.theme}>
-                      <span>{String(item.rank).padStart(2, "0")}</span>
-                      <b>{item.theme}</b>
+                      <span className="theme-rank">{String(item.rank).padStart(2, "0")}</span>
+                      <div className="theme-rank-copy">
+                        <b>{item.theme}</b>
+                        <i><span style={{ width: `${Math.max(12, prominence)}%` }} /></i>
+                      </div>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ol>
               ) : (
                 <div className="panel-empty-state compact">
@@ -1013,7 +1040,7 @@ export default function Dashboard() {
             </Panel>
             <Panel title="Signal sentiment" className="sentiment-panel">
               {hasSentiment ? (
-                <ResponsiveContainer width="100%" height={160}>
+                <ResponsiveContainer width="100%" height={190}>
                   <BarChart data={sentimentData}>
                     <CartesianGrid stroke="rgba(112,151,204,.10)" vertical={false} />
                     <XAxis dataKey="label" tick={{ fill: COLORS.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -1032,6 +1059,23 @@ export default function Dashboard() {
                   <span>The next semantic scan will classify the current story landscape.</span>
                 </div>
               )}
+            </Panel>
+            <Panel title="Engagement profile" className="engagement-panel">
+              <p className="chart-caption">HN score → · comments ↑ · bubble size = total attention</p>
+              <ResponsiveContainer width="100%" height={174}>
+                <ScatterChart margin={{ top: 6, right: 8, bottom: 2, left: -8 }}>
+                  <CartesianGrid stroke="rgba(112,151,204,.10)" />
+                  <XAxis type="number" dataKey="score" name="HN score" tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis type="number" dataKey="comments" name="Comments" tick={{ fill: COLORS.muted, fontSize: 10 }} axisLine={false} tickLine={false} width={38} />
+                  <ZAxis type="number" dataKey="attention" range={[45, 170]} />
+                  <Tooltip content={<StoryEngagementTooltip />} cursor={{ stroke: "rgba(86,212,255,.25)", strokeDasharray: "3 3" }} />
+                  <Scatter data={engagementData} fill={COLORS.cyan}>
+                    {engagementData.map((story: Row, index: number) => (
+                      <Cell key={`${story.title}-${index}`} fill={story.comments > story.score ? COLORS.orange : COLORS.cyan} fillOpacity={.86} />
+                    ))}
+                  </Scatter>
+                </ScatterChart>
+              </ResponsiveContainer>
             </Panel>
           </div>
           <section className="topic-evidence-workspace">
