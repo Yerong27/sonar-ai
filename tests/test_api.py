@@ -421,7 +421,7 @@ def test_ai_intelligence_uses_monitoring_summary_without_anomalies(
                             },
                         ],
                         "top_topics": ["AI Infrastructure", "Developer Tools"],
-                        "dominant_theme": "AI Infrastructure",
+                        "dominant_theme": "AI Infrastructure and Developer Tools",
                         "sentiment_distribution": {
                             "positive": 0.5,
                             "negative": 0.1,

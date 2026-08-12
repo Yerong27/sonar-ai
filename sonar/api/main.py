@@ -744,8 +744,8 @@ def create_app(
             monitoring_payload = {}
         monitoring_topics = _string_list(monitoring_payload.get("top_topics"), limit=8)
         dominant_theme = str(monitoring_payload.get("dominant_theme") or "").strip()
-        if dominant_theme and dominant_theme not in monitoring_topics:
-            monitoring_topics.insert(0, dominant_theme)
+        if dominant_theme and not monitoring_topics:
+            monitoring_topics.append(dominant_theme)
         monitoring_sentiment = _monitoring_sentiment(monitoring_payload)
         dominant_sentiment = (
             max(monitoring_sentiment, key=monitoring_sentiment.get)
