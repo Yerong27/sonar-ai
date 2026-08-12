@@ -360,24 +360,13 @@ a { color: inherit; text-decoration: none; }
 .interactive-panel-heading { min-height: 28px; display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #9fb1c6; font-size: 12px; }
 .interactive-panel-heading button { padding: 4px 7px; border: 1px solid rgba(86, 212, 255, .2); border-radius: 6px; color: var(--cyan); background: rgba(86, 212, 255, .06); cursor: pointer; font-size: 11px; }
 .interactive-panel-heading b { color: #aec0d4; font: 600 11px var(--font-sans); font-variant-numeric: tabular-nums; }
-.bubble-field {
-  min-height: 132px; display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 10px 14px;
-  padding: 12px 8px 6px; overflow: hidden;
-}
-.bubble-field.bubble-count-1, .bubble-field.bubble-count-2, .bubble-field.bubble-count-3 { min-height: 132px; }
-.bubble-field.bubble-count-4, .bubble-field.bubble-count-5, .bubble-field.bubble-count-6 { min-height: 190px; }
-.bubble-field.bubble-count-7, .bubble-field.bubble-count-8, .bubble-field.bubble-count-9, .bubble-field.bubble-count-10 { min-height: 242px; }
-.bubble-node {
-  flex: 0 0 auto; display: grid; place-items: center; align-content: center; gap: 3px; padding: 8px;
-  border: 1px solid rgba(91, 173, 229, .28); border-radius: 50%; color: #d8f3ff;
-  background: radial-gradient(circle at 35% 25%, rgba(65, 137, 207, .78), rgba(24, 59, 112, .82));
-  box-shadow: 0 8px 20px rgba(0,0,0,.14); cursor: pointer; font-size: 11px; text-align: center;
-}
-.bubble-node span { max-width: 78px; line-height: 1.15; }
-.bubble-node small { color: #b9d3e4; font: 600 9px var(--font-sans); font-variant-numeric: tabular-nums; }
-.bubble-node:hover { border-color: var(--cyan); transform: translateY(-2px); background: radial-gradient(circle at 35% 25%, rgba(74, 167, 222, .88), rgba(31, 79, 139, .9)); }
-.bubble-node.primary { color: #effcff; background: radial-gradient(circle at 35% 25%, rgba(75, 203, 238, .9), rgba(28, 118, 173, .88)); box-shadow: 0 0 26px rgba(86, 212, 255, .13); }
-.bubble-node.selected { border-color: #eafaff; box-shadow: 0 0 0 3px rgba(86, 212, 255, .2), 0 0 28px rgba(86, 212, 255, .2); }
+.bubble-field { min-height: 330px; display: grid; place-items: center; overflow: hidden; }
+.topic-bubble { cursor: pointer; outline: none; }
+.topic-bubble circle { stroke: rgba(156, 222, 255, .58); stroke-width: 1.5; filter: drop-shadow(0 8px 12px rgba(0,0,0,.2)); transition: stroke .16s ease, filter .16s ease, fill-opacity .16s ease; }
+.topic-bubble:hover circle, .topic-bubble:focus-visible circle { stroke: #a7ecff; stroke-width: 2.5; filter: drop-shadow(0 0 14px rgba(86,212,255,.32)); }
+.topic-bubble.selected circle { stroke: #effcff; stroke-width: 3; filter: drop-shadow(0 0 18px rgba(86,212,255,.45)); }
+.topic-bubble-label { pointer-events: none; fill: #f4fbff; font: 650 10px var(--font-sans); paint-order: stroke; stroke: rgba(7, 23, 45, .72); stroke-width: 2px; stroke-linejoin: round; }
+.topic-bubble-count { pointer-events: none; fill: #d2e7f3; font: 650 8px var(--font-sans); font-variant-numeric: tabular-nums; paint-order: stroke; stroke: rgba(7, 23, 45, .72); stroke-width: 2px; }
 .bubble-empty { align-self: center; padding: 24px 8px; color: #8fa3bb; font-size: 12px; text-align: center; }
 .notable-list { display: grid; }
 .notable-list a { display: flex; justify-content: space-between; gap: 18px; padding: 10px 5px; border-top: 1px solid rgba(103, 149, 208, .09); color: #b9e8fb; font-size: 12px; }

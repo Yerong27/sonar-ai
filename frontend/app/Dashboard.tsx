@@ -347,7 +347,47 @@ function ChartTooltip({ active, payload, label }: Row) {
   );
 }
 
-function BubbleField({
+const TOPIC_COLORS = ["#42c8ee", "#3f88d9", "#386fc3", "#407acb", "#327caf", "#4777bc", "#2f659f", "#4a74a8", "#32688d", "#3a79a1"];
+
+function bubbleSignalStrength(item: Row) {
+  const explicit = Number(item.signal_strength || item.weight || 0);
+  if (explicit > 0) return explicit;
+  return (item.stories || []).reduce(
+    (total: number, story: Row) => total + Number(story.score || 0) + (1.5 * Number(story.num_comments || 0)),
+    0,
+  );
+}
+
+function splitBubbleLabel(label: string, maxCharacters: number) {
+  const words = label.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  for (const word of words) {
+    const current = lines[lines.length - 1];
+    if (current && `${current} ${word}`.length <= maxCharacters) {
+      lines[lines.length - 1] = `${current} ${word}`;
+    } else if (lines.length < 3) {
+      lines.push(word);
+    } else {
+      lines[2] = `${lines[2]} ${word}`;
+    }
+  }
+  return lines;
+}
+
+function TopicBubbleTooltip({ active, payload }: Row) {
+  if (!active || !payload?.length) return null;
+  const topic = payload[0]?.payload;
+  return (
+    <div className="chart-tooltip">
+      <strong>{topic.keyword}</strong>
+      <span>{formatNumber(topic.story_count)} supporting stories</span>
+      <span>{formatNumber(topic.discussion_intensity)} average comments</span>
+      <span>{formatNumber(topic.signal_strength)} total HN attention</span>
+    </div>
+  );
+}
+
+function TopicBubbleChart({
   items,
   selectedKeyword,
   onSelectKeyword,
@@ -356,32 +396,91 @@ function BubbleField({
   selectedKeyword: string | null;
   onSelectKeyword: (keyword: string | null) => void;
 }) {
-  const max = Math.max(...items.map((item) => Number(item.story_count || 1)), 1);
+  const chartData = items.slice(0, 10).map((item, index) => {
+    const stories = item.stories || [];
+    const storyCount = Number(item.story_count || stories.length || 0);
+    const comments = stories.reduce((total: number, story: Row) => total + Number(story.num_comments || 0), 0);
+    return {
+      ...item,
+      story_count: storyCount,
+      discussion_intensity: Number(item.discussion_intensity || (storyCount ? comments / storyCount : 0)),
+      signal_strength: bubbleSignalStrength(item),
+      color: TOPIC_COLORS[index % TOPIC_COLORS.length],
+    };
+  });
+  const maxCoverage = Math.max(...chartData.map((item) => item.story_count), 1);
+  const minCoverage = Math.min(...chartData.map((item) => item.story_count), 1);
+  const maxDiscussion = Math.max(...chartData.map((item) => item.discussion_intensity), 1);
   return (
-    <div className={`bubble-field bubble-count-${Math.min(items.length, 10)}`} aria-label="Keyword explorer">
-      {items.slice(0, 10).map((item, index) => {
-        const isSelected = selectedKeyword === item.keyword;
-        const ratio = Number(item.story_count || 1) / max;
-        const size = Math.round(68 + ratio * 34);
-        return (
-          <button
-            type="button"
-            className={`bubble-node${index === 0 ? " primary" : ""}${isSelected ? " selected" : ""}`}
-            key={item.keyword}
-            style={{ width: size, height: size }}
-            aria-label={`Filter notable stories by ${item.keyword}`}
-            aria-pressed={isSelected}
-            onClick={() => onSelectKeyword(isSelected ? null : item.keyword)}
-          >
-            <span>{item.keyword}</span>
-            <small>{item.story_count || 0} stories</small>
-          </button>
-        );
-      })}
-      {!items.length && (
-        <div className="bubble-empty">
-          No recurring topic has enough supporting stories in this window.
-        </div>
+    <div className="bubble-field">
+      {chartData.length ? (
+        <ResponsiveContainer width="100%" height={330}>
+          <ScatterChart margin={{ top: 38, right: 34, bottom: 34, left: 18 }}>
+            <CartesianGrid stroke="rgba(112,151,204,.10)" />
+            <XAxis
+              type="number"
+              dataKey="story_count"
+              domain={[Math.max(0, minCoverage - .5), maxCoverage + .5]}
+              allowDecimals={false}
+              tick={{ fill: COLORS.muted, fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              label={{ value: "Story coverage", position: "insideBottom", offset: -20, fill: COLORS.muted, fontSize: 10 }}
+            />
+            <YAxis
+              type="number"
+              dataKey="discussion_intensity"
+              domain={[0, Math.ceil(maxDiscussion * 1.08)]}
+              tick={{ fill: COLORS.muted, fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              width={44}
+              tickFormatter={(value) => formatNumber(value)}
+              label={{ value: "Avg comments", angle: -90, position: "insideLeft", fill: COLORS.muted, fontSize: 10 }}
+            />
+            <ZAxis type="number" dataKey="signal_strength" range={[700, 3300]} />
+            <Tooltip content={<TopicBubbleTooltip />} cursor={{ strokeDasharray: "3 3", stroke: "rgba(86,212,255,.2)" }} />
+            <Scatter
+              data={chartData}
+              shape={(props: Row) => {
+                const item = props.payload;
+                const radius = Math.sqrt(Number(props.size || 700) / Math.PI);
+                const lines = splitBubbleLabel(String(item.keyword), radius >= 48 ? 14 : 10).slice(0, 3);
+                const labelStart = -((lines.length - 1) * 6) - 4;
+                const isSelected = selectedKeyword === item.keyword;
+                return (
+                  <g
+                    className={`topic-bubble${isSelected ? " selected" : ""}`}
+                    transform={`translate(${props.cx} ${props.cy})`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Filter notable stories by ${item.keyword}; ${item.story_count} supporting stories`}
+                    aria-pressed={isSelected}
+                    onClick={() => onSelectKeyword(isSelected ? null : item.keyword)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onSelectKeyword(isSelected ? null : item.keyword);
+                      }
+                    }}
+                  >
+                    <circle r={radius} fill={item.color} fillOpacity=".74" />
+                    <text className="topic-bubble-label" textAnchor="middle">
+                      {lines.map((line, lineIndex) => (
+                        <tspan key={`${line}-${lineIndex}`} x="0" y={labelStart + (lineIndex * 12)}>{line}</tspan>
+                      ))}
+                    </text>
+                    <text className="topic-bubble-count" textAnchor="middle" y={labelStart + (lines.length * 12) + 3}>
+                      {item.story_count} stories
+                    </text>
+                  </g>
+                );
+              }}
+            />
+          </ScatterChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className="bubble-empty">No recurring topic has enough supporting stories in this window.</div>
       )}
     </div>
   );
@@ -856,7 +955,7 @@ export default function Dashboard() {
               </div>
             )}
           </Panel>
-          <Panel title="Keyword visibility" className="visibility-panel">
+          <Panel title="Topic visibility" className="visibility-panel">
             <ResponsiveContainer width="100%" height={210}>
               <BarChart data={(intelligence.heading_visibility || []).slice(0, 6)} layout="vertical" margin={{ left: 6, right: 18 }}>
                 <CartesianGrid stroke="rgba(112,151,204,.10)" horizontal={false} />
@@ -890,12 +989,12 @@ export default function Dashboard() {
             )}
           </Panel>
           <div className="keyword-evidence-row">
-            <Panel title="Keyword explorer" className="keyword-panel">
+            <Panel title="Topic landscape" className="keyword-panel">
               <div className="interactive-panel-heading">
-                <span>Recurring topics supported by at least two stories</span>
+                <span>Coverage → · discussion ↑ · bubble area = total HN attention</span>
                 {selectedKeyword && <button type="button" onClick={() => setSelectedKeyword(null)}>Clear filter</button>}
               </div>
-              <BubbleField
+              <TopicBubbleChart
                 items={intelligence.keyword_bubbles || []}
                 selectedKeyword={selectedKeyword}
                 onSelectKeyword={setSelectedKeyword}

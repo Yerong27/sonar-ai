@@ -745,7 +745,25 @@ def create_app(
             {
                 "keyword": signal["display_keyword"],
                 "raw_keyword": signal["keyword"],
-                "weight": signal["story_count"],
+                "weight": round(
+                    sum(
+                        story["score"] + (1.5 * story["num_comments"])
+                        for story in signal["stories"]
+                    ),
+                    1,
+                ),
+                "signal_strength": round(
+                    sum(
+                        story["score"] + (1.5 * story["num_comments"])
+                        for story in signal["stories"]
+                    ),
+                    1,
+                ),
+                "discussion_intensity": round(
+                    sum(story["num_comments"] for story in signal["stories"])
+                    / signal["story_count"],
+                    1,
+                ),
                 "rank": index + 1,
                 "story_count": signal["story_count"],
                 "stories": signal["stories"],

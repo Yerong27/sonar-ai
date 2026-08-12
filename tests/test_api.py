@@ -432,6 +432,9 @@ def test_ai_intelligence_uses_monitoring_summary_without_anomalies(
         for item in intelligence["keyword_bubbles"]
     }
     assert story_counts == {"AI Infrastructure": 2}
+    topic = intelligence["keyword_bubbles"][0]
+    assert topic["signal_strength"] > 0
+    assert topic["discussion_intensity"] > 0
     assert intelligence["notable_stories"][0]["story_id"] == "monitor-1"
     assert intelligence["event_briefs"] == []
 
