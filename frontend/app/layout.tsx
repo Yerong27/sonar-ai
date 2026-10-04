@@ -4,7 +4,7 @@ import "./globals.css";
 
 const title = "Sonar AI — Hacker News Signal Radar";
 const description =
-  "A live technology signal intelligence dashboard for Hacker News anomalies, evidence, and AI briefings.";
+  "An interactive Hacker News signal intelligence dashboard with traceable stories, anomalies, and AI briefings.";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import demoSnapshot from "./data/demo-snapshot.json";
+import { loadDashboardData, type DashboardData, type Row } from "./data-source";
 import {
   Activity,
   AlertTriangle,
@@ -32,17 +34,6 @@ import {
   ZAxis,
 } from "recharts";
 
-type Row = Record<string, any>;
-type DashboardData = {
-  overview: Row;
-  metrics: Row[];
-  intelligence: Row;
-  stories: Row[];
-  anomalies: Row[];
-  runtime: Row | null;
-  mode: "live" | "demo";
-};
-
 const COLORS = {
   cyan: "#56d4ff",
   blue: "#2f6feb",
@@ -52,167 +43,8 @@ const COLORS = {
   muted: "#8297b8",
 };
 
-const demoTimestamp = (hoursAgo: number) => new Date(Date.now() - hoursAgo * 60 * 60 * 1000).toISOString();
-
-const demoStories = [
-  { story_id: 47687273, source_feed: "topstories", title: "Git commands I run before reading any code", score: 2278, num_comments: 494, collected_at: demoTimestamp(1), permalink: "https://news.ycombinator.com/item?id=47687273", url: "https://piechowski.io/post/git-commands-before-reading-code/" },
-  { story_id: 47659135, source_feed: "topstories", title: "Sam Altman may control our future – can he be trusted?", score: 2172, num_comments: 904, collected_at: demoTimestamp(2), permalink: "https://news.ycombinator.com/item?id=47659135", url: "https://www.newyorker.com/magazine/2026/04/13/sam-altman-may-control-our-future-can-he-be-trusted" },
-  { story_id: 47691730, source_feed: "topstories", title: "I ported Mac OS X to the Nintendo Wii", score: 1901, num_comments: 323, collected_at: demoTimestamp(3), permalink: "https://news.ycombinator.com/item?id=47691730", url: "https://bryankeller.github.io/2026/04/08/porting-mac-os-x-nintendo-wii.html" },
-  { story_id: 48311647, source_feed: "topstories", title: "Claude Opus 4.8", score: 1736, num_comments: 1351, collected_at: demoTimestamp(4), permalink: "https://news.ycombinator.com/item?id=48311647", url: "https://www.anthropic.com/news/claude-opus-4-8" },
-  { story_id: 47706268, source_feed: "topstories", title: "EFF is leaving X", score: 1401, num_comments: 1274, collected_at: demoTimestamp(6), permalink: "https://news.ycombinator.com/item?id=47706268", url: "https://www.eff.org/deeplinks/2026/04/eff-leaving-x" },
-  { story_id: 47697870, source_feed: "newstories", title: "LittleSnitch for Linux", score: 1352, num_comments: 452, collected_at: demoTimestamp(8), permalink: "https://news.ycombinator.com/item?id=47697870", url: "https://obdev.at/products/littlesnitch-linux/index.html" },
-  { story_id: 48314136, source_feed: "topstories", title: "Bricks and Minifigs Stole a Man's $200k Lego Collection", score: 1309, num_comments: 589, collected_at: demoTimestamp(12), permalink: "https://news.ycombinator.com/item?id=48314136", url: "https://mybricklog.com/blog/bricks-minifigs-corporate-stole-old-mans-200000-lego-collection" },
-  { story_id: 48299753, source_feed: "topstories", title: "YouTube to automatically label AI-generated videos", score: 1308, num_comments: 818, collected_at: demoTimestamp(18), permalink: "https://news.ycombinator.com/item?id=48299753", url: "https://blog.youtube/news-and-events/improving-ai-labels-viewers-creators/" },
-  { story_id: 48324712, source_feed: "newstories", title: "The dead economy theory", score: 1049, num_comments: 1185, collected_at: demoTimestamp(23), permalink: "https://news.ycombinator.com/item?id=48324712", url: "https://www.owenmcgrann.com/p/the-dead-economy-theory" },
-  { story_id: 47725583, source_feed: "topstories", title: "Artemis II safely splashes down", score: 900, num_comments: 280, collected_at: demoTimestamp(28), permalink: "https://news.ycombinator.com/item?id=47725583", url: "https://www.cbsnews.com/live-updates/artemis-ii-splashdown-return/" },
-  { story_id: 47719740, source_feed: "newstories", title: "1D Chess", score: 819, num_comments: 142, collected_at: demoTimestamp(36), permalink: "https://news.ycombinator.com/item?id=47719740", url: "https://rowan441.github.io/1dchess/chess.html" },
-  { story_id: 47724352, source_feed: "topstories", title: "Filing the corners off my MacBooks", score: 816, num_comments: 403, collected_at: demoTimestamp(48), permalink: "https://news.ycombinator.com/item?id=47724352", url: "https://kentwalters.com/posts/corners/" },
-  { story_id: 48323683, source_feed: "newstories", title: "I am retiring from tech to live offline", score: 800, num_comments: 548, collected_at: demoTimestamp(60), permalink: "https://news.ycombinator.com/item?id=48323683", url: "https://openpath.quest/2026/i-am-retiring-from-tech-to-live-offline/" },
-  { story_id: 48324499, source_feed: "topstories", title: "GTA 6 Developers Unionize", score: 689, num_comments: 468, collected_at: demoTimestamp(72), permalink: "https://news.ycombinator.com/item?id=48324499", url: "https://rockstarintel.com/gta-6-developers-announce-rockstar-games-union/" },
-  { story_id: 47708818, source_feed: "newstories", title: "Native Instant Space Switching on macOS", score: 625, num_comments: 310, collected_at: demoTimestamp(84), permalink: "https://news.ycombinator.com/item?id=47708818", url: "https://arhan.sh/blog/native-instant-space-switching-on-macos/" },
-  { story_id: 47703419, source_feed: "topstories", title: "Meta removes ads for social media addiction litigation", score: 624, num_comments: 248, collected_at: demoTimestamp(96), permalink: "https://news.ycombinator.com/item?id=47703419", url: "https://www.axios.com/2026/04/09/meta-social-media-addiction-ads" },
-  { story_id: 47704804, source_feed: "newstories", title: "How NASA built Artemis II’s fault-tolerant computer", score: 613, num_comments: 222, collected_at: demoTimestamp(108), permalink: "https://news.ycombinator.com/item?id=47704804", url: "https://cacm.acm.org/news/how-nasa-built-artemis-iis-fault-tolerant-computer/" },
-  { story_id: 48309233, source_feed: "topstories", title: "UC faculty demand a return to SAT tests for STEM", score: 603, num_comments: 801, collected_at: demoTimestamp(120), permalink: "https://news.ycombinator.com/item?id=48309233", url: "https://www.latimes.com/california/story/2026-05-27/uc-math-professors-demand-return-of-sat-for-stem-admissions" },
-  { story_id: 47716490, source_feed: "newstories", title: "FBI used iPhone notification data to retrieve deleted Signal messages", score: 588, num_comments: 290, collected_at: demoTimestamp(132), permalink: "https://news.ycombinator.com/item?id=47716490", url: "https://9to5mac.com/2026/04/09/fbi-used-iphone-notification-data-to-retrieve-deleted-signal-messages/" },
-  { story_id: 48326802, source_feed: "topstories", title: "SQLite is all you need for durable workflows", score: 568, num_comments: 285, collected_at: demoTimestamp(144), permalink: "https://news.ycombinator.com/item?id=48326802", url: "https://obeli.sk/blog/sqlite-is-all-you-need-for-durable-workflows/" },
-  { story_id: 48315968, source_feed: "newstories", title: "GitHub bans security researcher who posted zero-day Windows exploits", score: 541, num_comments: 251, collected_at: demoTimestamp(156), permalink: "https://news.ycombinator.com/item?id=48315968", url: "https://www.tomshardware.com/tech-industry/cyber-security/microsofts-github-bans-security-researcher-who-posted-zero-day-windows-exploits-because-company-ruined-their-life-expert-claims-action-is-vindictive-and-promises-further-retaliation" },
-  { story_id: 47719486, source_feed: "topstories", title: "France to ditch Windows for Linux to reduce reliance on US tech", score: 508, num_comments: 637, collected_at: demoTimestamp(168), permalink: "https://news.ycombinator.com/item?id=47719486", url: "https://techcrunch.com/2026/04/10/france-to-ditch-windows-for-linux-to-reduce-reliance-on-us-tech/" },
-];
-
-const demoMetrics = [
-  [0, 12, 4, 1180], [1, 19, 7, 1420], [2, 15, 5, 1290], [3, 10, 8, 1510],
-  [4, 8, 6, 1330], [5, 11, 9, 1670], [6, 7, 12, 1810], [7, 16, 10, 1740],
-  [8, 9, 14, 2130], [9, 13, 17, 2277], [10, 18, 21, 2460], [11, 22, 16, 2277],
-].map(([slot, volume, entries, engagement]) => ({
-  collected_at: new Date(Date.now() - (11 - slot) * 30 * 60 * 1000).toISOString(),
-  source_feed: slot % 2 ? "topstories" : "newstories",
-  story_volume: volume,
-  avg_score: entries,
-  avg_comments: Math.round(entries * 0.62),
-  engagement_score: engagement,
-}));
-
-const demoAnomalies = [
-  { id: 1, source_feed: "topstories", metric_name: "engagement_score", z_score: 3.8, metric_value: 2277, triggered_by: "engagement_score", detected_at: "2026-07-19T05:44:00Z", news_aligned: true, explanation_status: "complete" },
-  { id: 2, source_feed: "newstories", metric_name: "story_volume", z_score: 2.9, metric_value: 22, triggered_by: "story_volume", detected_at: "2026-07-19T04:18:00Z", news_aligned: false, explanation_status: "complete" },
-  { id: 3, source_feed: "topstories", metric_name: "avg_comments", z_score: 2.6, metric_value: 1274, triggered_by: "avg_comments", detected_at: "2026-07-19T03:27:00Z", news_aligned: true, explanation_status: "complete" },
-  { id: 4, source_feed: "newstories", metric_name: "growth_rate", z_score: 2.3, metric_value: 1.8, triggered_by: "growth_rate", detected_at: "2026-07-19T02:42:00Z", news_aligned: false, explanation_status: "suppressed" },
-  { id: 5, source_feed: "topstories", metric_name: "story_volume", z_score: 2.1, metric_value: 18, triggered_by: "story_volume", detected_at: "2026-07-19T01:18:00Z", news_aligned: false, explanation_status: "complete" },
-];
-
-const demoBriefs = [
-  {
-    id: 1,
-    headline_summary: "Open AI infrastructure dominates today’s developer attention",
-    topic: "AI Infrastructure",
-    summary: "Open models and local coding agents are drawing unusually concentrated engagement. The signal is supported by several high-scoring, independently discussed stories.",
-    event_type: "engagement_spike",
-    sentiment_label: "positive",
-    confidence: 0.87,
-    news_aligned: true,
-    evidence_count: 5,
-    source_feed: "topstories",
-    metric_name: "engagement_score",
-    z_score: 3.8,
-    triggered_by: "engagement_score",
-    ai_status: "complete",
-    model: "gemini-3.5-flash-lite",
-    bullet_insights: [
-      "Local inference and coding agents account for most of the current engagement gain.",
-      "Discussion spans cost, privacy, and developer control rather than a single product launch.",
-      "External coverage confirms sustained interest in open model infrastructure.",
-    ],
-  },
-  {
-    id: 2,
-    headline_summary: "Database tooling moves from storage toward AI retrieval",
-    topic: "Data Infrastructure",
-    summary: "Vector search and SQLite-based retrieval are rising together, suggesting renewed interest in simpler AI data stacks.",
-    event_type: "research_breakthrough",
-    sentiment_label: "neutral",
-    confidence: 0.72,
-    news_aligned: false,
-    evidence_count: 4,
-    source_feed: "newstories",
-    metric_name: "story_volume",
-    z_score: 2.9,
-    triggered_by: "story_volume",
-    ai_status: "complete",
-    model: "gemini-3.5-flash-lite",
-    bullet_insights: ["Search infrastructure is the second-largest topic cluster.", "Interest is distributed across several stories.", "External confirmation remains limited."],
-  },
-  {
-    id: 3,
-    headline_summary: "Generated code quality becomes a high-comment controversy",
-    topic: "Software Quality",
-    summary: "A concentrated discussion is forming around the long-term maintenance cost of AI-generated code.",
-    event_type: "controversy",
-    sentiment_label: "mixed",
-    confidence: 0.79,
-    news_aligned: true,
-    evidence_count: 3,
-    source_feed: "topstories",
-    metric_name: "avg_comments",
-    z_score: 2.6,
-    triggered_by: "avg_comments",
-    ai_status: "complete",
-    model: "gemini-3.5-flash-lite",
-    bullet_insights: ["Comment velocity is high relative to score.", "Most discussion focuses on review burden.", "The topic may persist beyond the current window."],
-  },
-];
-
 function makeDemoData(): DashboardData {
-  const counts = {
-    stories: 22,
-    anomalies: 1,
-    explanations: demoBriefs.length,
-    ai_runs: demoBriefs.length,
-  };
-  return {
-    overview: {
-      status: {
-        counts,
-        last_collection_time: new Date().toISOString(),
-        gemini_status: "ok",
-      },
-      top_stories: demoStories.slice(0, 8),
-      latest_anomalies: demoAnomalies,
-      latest_brief: demoBriefs[0],
-      feed_summary: [
-        { source_feed: "topstories", story_count: 12, total_score: 7117, total_comments: 1800 },
-        { source_feed: "newstories", story_count: 10, total_score: 3280, total_comments: 1120 },
-      ],
-    },
-    metrics: demoMetrics,
-    intelligence: {
-      latest_brief: demoBriefs[0],
-      event_briefs: demoBriefs,
-      ranked_themes: [
-        { rank: 1, theme: "AI Infrastructure", score: 9 },
-        { rank: 2, theme: "Software Quality", score: 7 },
-        { rank: 3, theme: "Data Infrastructure", score: 6 },
-        { rank: 4, theme: "Developer Tools", score: 4 },
-        { rank: 5, theme: "Security", score: 3 },
-      ],
-      sentiment_distribution: [
-        { label: "positive", count: 3 }, { label: "negative", count: 1 },
-        { label: "neutral", count: 4 }, { label: "mixed", count: 2 },
-      ],
-      topic_clusters: [
-        { keyword: "Security & Privacy", raw_keyword: "security privacy", weight: 4, story_count: 4, stories: [demoStories[4], demoStories[5], demoStories[18], demoStories[20]] },
-        { keyword: "Operating Systems", raw_keyword: "operating systems", weight: 4, story_count: 4, stories: [demoStories[2], demoStories[5], demoStories[11], demoStories[14]] },
-        { keyword: "AI Platforms", raw_keyword: "ai platforms", weight: 3, story_count: 3, stories: [demoStories[1], demoStories[3], demoStories[7]] },
-        { keyword: "Technology Governance", raw_keyword: "technology governance", weight: 3, story_count: 3, stories: [demoStories[7], demoStories[15], demoStories[21]] },
-        { keyword: "Developer Tooling", raw_keyword: "developer tooling", weight: 2, story_count: 2, stories: [demoStories[0], demoStories[19]] },
-        { keyword: "Space Systems", raw_keyword: "space systems", weight: 2, story_count: 2, stories: [demoStories[9], demoStories[16]] },
-      ],
-      notable_stories: demoStories.slice(0, 8),
-    },
-    stories: demoStories,
-    anomalies: demoAnomalies,
-    runtime: null,
-    mode: "demo",
-  };
+  return structuredClone(demoSnapshot) as DashboardData;
 }
 
 function formatNumber(value: unknown, digits = 0) {
@@ -266,31 +98,13 @@ function apiBase() {
   return "";
 }
 
-async function fetchJson(path: string) {
-  const response = await fetch(`${apiBase()}${path}`);
-  if (!response.ok) throw new Error(`API ${response.status}`);
-  return response.json();
+// Live is opt-in. An API URL left in an environment cannot activate a demo build.
+function liveEnabled() {
+  return process.env.NEXT_PUBLIC_SONAR_MODE === "live";
 }
 
 async function loadDashboard(): Promise<DashboardData> {
-  if (!apiBase()) return makeDemoData();
-  const [overview, metrics, intelligence, stories, anomalies, runtime] = await Promise.all([
-    fetchJson("/api/dashboard/overview"),
-    fetchJson("/api/metrics/timeline?limit=160"),
-    fetchJson("/api/ai/intelligence"),
-    fetchJson("/api/stories?limit=80"),
-    fetchJson("/api/anomalies?limit=40"),
-    fetchJson("/api/runtime").catch(() => null),
-  ]);
-  return {
-    overview,
-    metrics: metrics.timeline || [],
-    intelligence,
-    stories: stories.stories || [],
-    anomalies: anomalies.anomalies || [],
-    runtime,
-    mode: "live",
-  };
+  return loadDashboardData({ mode: process.env.NEXT_PUBLIC_SONAR_MODE, base: apiBase(), snapshot: makeDemoData() });
 }
 
 function SectionHeader({ eyebrow, title, copy, action }: { eyebrow: string; title: string; copy?: string; action?: React.ReactNode }) {
@@ -579,6 +393,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     refresh();
+    if (!liveEnabled()) return;
     const timer = window.setInterval(() => refresh(), 60_000);
     return () => window.clearInterval(timer);
   }, []);
@@ -672,7 +487,7 @@ export default function Dashboard() {
       : Math.round((index * (metricData.length - 1)) / (timelineTickCount - 1));
     return Number(metricData[dataIndex]?.timestamp);
   });
-  const scatterData = anomalies.length
+  const scatterData: Row[] = anomalies.length
     ? anomalies.map((row, index) => ({
         ...row,
         timeIndex: index + 1,
@@ -735,7 +550,7 @@ export default function Dashboard() {
     { icon: Wifi, label: "Data stream", detail: data.mode === "live" ? "Healthy" : "Demo snapshot", value: data.mode === "live" ? "Live" : "Ready" },
     { icon: Radio, label: "Coverage", detail: "Hacker News feeds", value: `${data.overview.feed_summary?.length || 2} feeds` },
     { icon: Database, label: "Signals analyzed", detail: "Current dataset", value: formatNumber(counts.stories || data.stories.length) },
-    { icon: RefreshCw, label: "Refresh rate", detail: "Status-aware polling", value: "60 sec" },
+    { icon: RefreshCw, label: "Refresh rate", detail: data.mode === "live" ? "Status-aware polling" : "Recorded data · no polling", value: data.mode === "live" ? "60 sec" : "Off" },
     { icon: ShieldCheck, label: "Confidence filter", detail: "Evidence-backed", value: "On" },
   ];
 
@@ -762,12 +577,12 @@ export default function Dashboard() {
           </nav>
           <button className="refresh-button" type="button" onClick={() => refresh(true)} disabled={refreshing}>
             <RefreshCw size={14} className={refreshing ? "spin" : ""} />
-            {refreshing ? "Refreshing" : "Refresh"}
+            {refreshing ? "Refreshing" : data.mode === "demo" ? "Reload snapshot" : "Refresh"}
           </button>
         </div>
         <div className="hero-copy">
           <h1>Hacker News signal radar</h1>
-          <p>Live HN signals, anomaly detection and evidence-grounded AI intelligence.</p>
+          <p>{data.mode === "demo" ? "Explore recorded HN signals, anomaly detection and evidence-grounded AI intelligence." : "Live HN signals, anomaly detection and evidence-grounded AI intelligence."}</p>
         </div>
         <div className="command-center">
           <div className="command-topline">
@@ -775,17 +590,17 @@ export default function Dashboard() {
             <i className={alertCount ? "status-dot warning" : "status-dot"} />
           </div>
           <strong className={alertCount ? "alert-mode" : "stable-mode"}>
-            {alertCount ? "Alert mode" : "Monitoring stable"}
+            {data.mode === "demo" ? "Interactive demo" : alertCount ? "Alert mode" : "Monitoring stable"}
           </strong>
           <p>
-            {alertCount
+            {data.mode === "demo" ? "Recorded production data. Live collection is offline." : alertCount
               ? `${alertCount} high-confidence signal requires review.`
               : "No high-confidence anomalies in the current window."}
           </p>
           <div className="command-meta">
             <span><b>Mode</b>{data.mode === "live" ? "Live API" : "Demo snapshot"}</span>
-            <span><b>Gemini</b>{status.gemini_status || "ready"}</span>
-            <span><b>Last scan</b>{formatTime(status.last_collection_time)}</span>
+            <span><b>Gemini</b>{data.mode === "demo" ? "Recorded output" : status.gemini_status || "ready"}</span>
+            <span><b>{data.mode === "demo" ? "Snapshot" : "Last scan"}</b>{data.mode === "demo" ? formatDateTime(demoSnapshot.captured_at) : formatTime(status.last_collection_time)}</span>
           </div>
         </div>
       </header>
@@ -793,7 +608,7 @@ export default function Dashboard() {
       {(notice || data.mode === "demo") && (
         <div className="demo-banner">
           <Sparkles size={14} />
-          {notice || "Hosted demo mode — the deployed dashboard uses a curated snapshot; local mode connects to FastAPI."}
+          {notice || `Demo · production snapshot captured ${formatDateTime(demoSnapshot.captured_at)} · no live API, database, or Gemini calls.`}
         </div>
       )}
 
@@ -858,11 +673,11 @@ export default function Dashboard() {
                 )}
             </Panel>
 
-            <Panel title="Live status" className="operations-status-panel">
+            <Panel title={data.mode === "demo" ? "Snapshot status" : "Live status"} className="operations-status-panel">
               <div className={alertCount ? "operations-alert active" : "operations-alert"}>
                 <AlertTriangle size={18} />
-                <span><b>{alertCount ? "Anomaly detected" : "Monitoring stable"}</b><small>{alertCount ? "High-confidence signal requires review" : "All monitored feeds are within range"}</small></span>
-                <em>{alertCount ? "Now" : "Healthy"}</em>
+                <span><b>{data.mode === "demo" ? "Recorded monitoring state" : alertCount ? "Anomaly detected" : "Monitoring stable"}</b><small>{data.mode === "demo" ? "Explore the captured signals below" : alertCount ? "High-confidence signal requires review" : "All monitored feeds are within range"}</small></span>
+                <em>{data.mode === "demo" ? "Snapshot" : alertCount ? "Now" : "Healthy"}</em>
               </div>
               <div className="operations-status-list">
                 {statusRows.map((item) => {
@@ -933,7 +748,7 @@ export default function Dashboard() {
               )}
             </Panel>
 
-            <Panel title="Signal feed (live)" className="signal-feed-panel">
+            <Panel title={data.mode === "demo" ? "Signal feed (snapshot)" : "Signal feed (live)"} className="signal-feed-panel">
               <div className="signal-feed-list">
                 {data.stories.slice(0, 7).map((story, index) => (
                   <a href={storyHref(story)} target="_blank" rel="noreferrer" key={story.story_id}>
@@ -1250,7 +1065,7 @@ export default function Dashboard() {
       </section>
       )}
 
-      <aside className="runtime-verification" aria-label="Live infrastructure verification">
+      {data.mode === "live" ? <aside className="runtime-verification" aria-label="Live infrastructure verification">
         <div className="runtime-verification-heading">
           <Server size={17} />
           <span>
@@ -1266,11 +1081,22 @@ export default function Dashboard() {
         <a href={`${apiBase()}/api/runtime`} target="_blank" rel="noreferrer">
           Open live runtime record <ExternalLink size={14} />
         </a>
-      </aside>
+      </aside> : <aside className="runtime-verification" aria-label="Demo data provenance">
+        <div className="runtime-verification-heading">
+          <Database size={17} />
+          <span><small>Recorded production snapshot</small><b>Interactive demo · cloud backend offline</b></span>
+        </div>
+        <dl>
+          <div><dt>Captured</dt><dd>{formatDateTime(demoSnapshot.captured_at)}</dd></div>
+          <div><dt>Stories available</dt><dd>{data.stories.length}</dd></div>
+          <div><dt>Live API / AI calls</dt><dd>None</dd></div>
+        </dl>
+        <a href="https://github.com/Yerong27/sonar-ai" target="_blank" rel="noreferrer">Explore the project <ExternalLink size={14} /></a>
+      </aside>}
 
       <footer>
         <span><Activity size={14} /> Sonar AI</span>
-        <p>Sites dashboard · Cloud Run API · Cloud SQL PostgreSQL</p>
+        <p>{data.mode === "demo" ? "Interactive demo · Recorded data · No live collection" : "Sites dashboard · Cloud Run API · Cloud SQL PostgreSQL"}</p>
       </footer>
     </main>
   );

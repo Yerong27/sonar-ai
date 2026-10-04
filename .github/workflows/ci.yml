@@ -83,8 +83,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build frontend
-        run: npm run build
+      - name: Verify demo isolation and build frontend
+        run: npm test
 
   container:
     name: Production container build

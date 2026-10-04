@@ -59,6 +59,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        SONAR_MODE: live
+        SONAR_API_BASE: http://127.0.0.1:8060
     ports:
       - "5173:3000"
     depends_on:

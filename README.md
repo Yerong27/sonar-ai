@@ -2,17 +2,36 @@
 
 Sonar AI is a Hacker News signal-monitoring and evidence-analysis system. It collects story activity over time, measures changes in engagement, detects unusual behavior, and uses Gemini to turn the current technology landscape into structured, traceable intelligence.
 
-The project includes a live dashboard, a read-only FastAPI service, a scheduled collection pipeline, PostgreSQL persistence, AI audit records, containerized workloads, and reproducible GCP infrastructure.
+The project includes an interactive dashboard, a read-only FastAPI service, a scheduled collection pipeline, PostgreSQL persistence, AI audit records, containerized workloads, and reproducible GCP infrastructure. The public dashboard currently runs in **Demo mode**; the complete live stack remains in this repository.
 
-## Live Demo
+## Interactive Demo
 
-### **[Open the live Sonar AI Radar →](https://sonar-ai-radar.liyerongvv.chatgpt.site)**
+### **[Open Sonar AI Radar →](https://sonar-ai-radar.liyerongvv.chatgpt.site)**
 
-Explore the production dashboard, including live Hacker News signals, AI-generated landscape analysis, interactive topic filtering, anomaly investigation, and story-level links.
+Explore recorded Hacker News signals, AI-generated landscape analysis, interactive keyword filtering, anomaly investigations, and story-level links. The demo uses real production API responses captured on **4 October 2026**, not newly generated or randomly simulated activity.
 
-Production API: [service status](https://sonar-api-4akcp3ehqa-ts.a.run.app/api/status) · [runtime metadata](https://sonar-api-4akcp3ehqa-ts.a.run.app/api/runtime)
+Demo mode makes **no requests to the GCP API, database, Gemini, or NewsAPI**, and does not poll or accumulate data. Opening a source story still takes you to its external Hacker News discussion. The GCP live stack is offline to avoid ongoing cloud costs; historical deployment code and infrastructure definitions remain available for review and restoration.
 
-The dashboard reads live data from the production API. If the API is unavailable, it can fall back to a curated demonstration snapshot rather than rendering a broken page.
+## Demo and Live Modes
+
+Both modes use the same dashboard and layout. Switching data sources requires configuration and a rebuild, not a rewrite.
+
+| Mode | Data source | Backend required |
+| --- | --- | --- |
+| `demo` (default) | Tracked production snapshot in `frontend/app/data/demo-snapshot.json` | None |
+| `live` | Six read-only FastAPI endpoints with 60-second polling | Running FastAPI and PostgreSQL |
+
+```bash
+cd frontend
+npm run dev:demo
+# For an already running local API:
+NEXT_PUBLIC_SONAR_API_BASE=http://127.0.0.1:8060 npm run dev:live
+# Production builds:
+npm run build:demo
+NEXT_PUBLIC_SONAR_API_BASE=https://your-api.example npm run build:live
+```
+
+An API URL alone cannot activate live mode: `NEXT_PUBLIC_SONAR_MODE=live` must be explicitly set. Public builds default to demo. The live deployment and Terraform GitHub Actions workflows are also gated by the repository variable `SONAR_LIVE_ENABLED=true`; CI still runs normally. See [mode switching and live restoration](docs/demo-and-live.md).
 
 ## What Sonar Does
 
@@ -61,7 +80,7 @@ Terraform + versioned GCS remote state
 Secret Manager for runtime credentials
 ```
 
-Production resources run in the GCP Sydney region (`australia-southeast1`). The API, collector, and migration job use separate service accounts and connect to Cloud SQL through the managed Unix socket.
+The live architecture was deployed in the GCP Sydney region (`australia-southeast1`). The API, collector, and migration job use separate service accounts and connect to Cloud SQL through the managed Unix socket. These resources are not required by the public demo.
 
 ## Main Components
 
@@ -139,7 +158,7 @@ In another terminal, start the dashboard:
 ```bash
 cd frontend
 npm install
-NEXT_PUBLIC_SONAR_API_BASE=http://127.0.0.1:8060 npm run dev
+NEXT_PUBLIC_SONAR_API_BASE=http://127.0.0.1:8060 npm run dev:live
 ```
 
 Open `http://127.0.0.1:5173`.
@@ -215,7 +234,7 @@ The infrastructure is divided into two Terraform roots:
 - [`terraform/bootstrap`](terraform/bootstrap/README.md) creates remote state, the Terraform deployer identity, and GitHub Workload Identity Federation.
 - [`terraform/application`](terraform/application/README.md) manages Cloud SQL, Secret Manager containers, Artifact Registry, service accounts, Cloud Run workloads, and Cloud Scheduler.
 
-Pull requests run Python linting and PostgreSQL tests, Alembic validation, the frontend production build, a production container build, and Terraform validation. After successful checks are merged into `main`, the deployment workflow builds one immutable image, runs migrations, updates the collector, deploys a new API revision, routes production traffic to it, and verifies readiness.
+Pull requests run Python linting and PostgreSQL tests, Alembic validation, demo network-isolation tests and the frontend production build, a production container build, and Terraform validation. When `SONAR_LIVE_ENABLED=true`, successful CI on `main` triggers deployment: one immutable image, database migrations, collector update, API revision deployment, traffic routing, and readiness validation. With the variable false or absent, cloud deployment is skipped so ordinary code changes cannot recreate the paid stack.
 
 Operational references:
 

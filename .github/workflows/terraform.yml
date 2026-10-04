@@ -38,6 +38,7 @@ env:
 jobs:
   terraform:
     name: ${{ inputs.operation }} application infrastructure
+    if: vars.SONAR_LIVE_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: infrastructure
     defaults:
