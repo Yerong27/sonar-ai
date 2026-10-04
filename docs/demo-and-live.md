@@ -8,6 +8,7 @@ Sonar retains one dashboard and its full backend, migrations, Docker stack, Terr
 - Snapshot: real read-only production responses captured 4 October 2026.
 - No backend calls or refresh timer in demo; interactive filters, charts, story links and investigations remain available.
 - GitHub variable `SONAR_LIVE_ENABLED=false`. Deployment and Terraform workflows are disabled while the GCP stack is offline; their source is retained and independently gated by this variable.
+- Sonar's project billing is disabled independently of the shared billing account. Cloud SQL, its workloads, scheduler, registry, secrets, and state bucket are removed after verified local backup. Restoring GCP operation requires explicitly re-enabling billing and recreating resources; switching the frontend alone does not do that.
 - Local `docker compose` remains a live-development stack. Its frontend explicitly builds with live mode and the local API URL. The standalone frontend defaults to demo.
 
 ## Build or preview either mode
@@ -52,7 +53,7 @@ The explicitly named verification container must be isolated and disposable: the
 
 Restoring live cloud operation is an explicit decision to resume billing, not part of switching to demo.
 
-1. Recreate the GCS state bucket from the bootstrap definitions if it was removed. Recover the privately archived state to the correct `bootstrap/default.tfstate` and `application/default.tfstate` objects; do not initialize an unrelated empty state over surviving IAM resources.
+1. Explicitly link the Sonar project to a billing account again. Recreate the GCS state bucket from the bootstrap definitions if it was removed. Recover the privately archived state to the correct `bootstrap/default.tfstate` and `application/default.tfstate` objects; do not initialize an unrelated empty state over surviving IAM resources.
 2. Run reviewed Terraform plans against the retained roots. Refresh reconciles manually removed resources; apply only the expected recreation plan. Restore Secret Manager values securely, never via Git. Keep Scheduler paused.
 3. Rebuild the application image in Artifact Registry. Recreate Cloud SQL and import the verified SQL export into the application database; apply any later Alembic migrations after restoring existing data.
 4. Restore API, migration and collector workloads, then verify `/health/ready`, `/api/status`, and `/api/runtime`.
